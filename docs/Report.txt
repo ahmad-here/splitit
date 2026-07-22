@@ -1,0 +1,421 @@
+================================================================================
+SPLITIT — PROJECT REPORT
+AI-Powered Bill-Splitting Mobile App
+================================================================================
+
+Prepared as an engineering report describing the system, every screen, and — in
+detail — the edge cases and user behaviours that were considered and handled
+while building the project.
+
+
+--------------------------------------------------------------------------------
+1. EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+
+Splitit is a Splitwise-inspired mobile app that splits a bill from a photo of an
+invoice. The user uploads a receipt (or just describes the bill in text), tells
+the app in plain language who bought what, and an LLM (Google Gemini via
+LangChain/LangGraph) extracts the line items and produces a fair split. Splits
+are saved on-device, tracked against a persistent members model with running
+balances (who owes whom), and can be shared to other apps such as WhatsApp.
+
+The product is split into two codebases:
+
+  * splitit/         Expo SDK 57 + expo-router + React Native app (frontend).
+  * splitit-server/  Next.js 16 App Router + TypeScript backend (LLM only).
+
+Guiding principles that shaped every decision:
+
+  * Local-first: the phone's local storage (AsyncStorage) IS the database.
+    The backend never persists user data — it only runs the LLM.
+  * Provider-agnostic AI: switching from Gemini to OpenAI is a near-single-file
+    change behind an LLMProvider interface.
+  * Deterministic money: the LLM only READS receipts and ASSIGNS items to
+    people; all arithmetic is done in code so totals always reconcile.
+  * Reusable, theme-aware UI: light / dark / system, one component library.
+
+
+--------------------------------------------------------------------------------
+2. ARCHITECTURE OVERVIEW
+--------------------------------------------------------------------------------
+
+Frontend (splitit/)
+  src/app/            expo-router screens (file-based routing)
+    (tabs)/           Home, History, Members, Settings + custom tab bar + FAB
+    upload.tsx        The conversational "New split" chat screen
+    result.tsx        AI result review screen
+    edit.tsx          Manual edit of item->person assignments
+    split/[id].tsx    Saved split detail (read-only, share/delete)
+  src/components/     Reusable UI kit + shared pieces (SplitSummary, MemberPicker)
+    ui/               Button, Card, Avatar, TextField, Chip, AmountText,
+                      ListItem, EmptyState, SectionHeader, Loader, Screen,
+                      SearchBar, BottomSheet, OptionSheet
+  src/db/             Local-storage layer: models, storage wrapper, repositories,
+                      balances math
+  src/store/          React contexts: store (data), theme mode, chat flow draft
+  src/api/            Chat + split HTTP clients, backend base-URL config
+  src/utils/          share, toast, currency/format, client-side split math
+
+Backend (splitit-server/)
+  lib/llm/            Provider abstraction (types, index selector, gemini,
+                      openai stub)
+  lib/graph/          LangGraph pipeline: extractItems -> assignItems ->
+                      computeSplit -> validate
+  lib/chat/agent.ts   Conversational agent (image description, text-only bills,
+                      member disambiguation, deterministic per-person math)
+  lib/schema.ts       Zod schemas shared as the API contract
+  app/api/chat        POST conversational endpoint
+  app/api/split       POST single-shot endpoint (multipart)
+  app/api/health      GET readiness probe
+
+Data flow (conversational path):
+  App collects messages (+ optional receipt image as base64 data URL) and the
+  chosen members -> POST /api/chat -> Gemini reads image/text -> returns either
+  a follow-up question OR a structured split -> server recomputes per-person
+  amounts deterministically -> app renders an inline result card -> user saves ->
+  stored locally and balances update.
+
+
+--------------------------------------------------------------------------------
+3. KEY DESIGN DECISIONS (and why)
+--------------------------------------------------------------------------------
+
+3.1  Backend = LLM only. All app data lives on-device. This keeps the product
+     private-by-default and offline-friendly for everything except the AI call.
+
+3.2  Gemini API key never ships in the app. It lives only in
+     splitit-server/.env.local (gitignored). The app calls our backend; the
+     backend calls Gemini. A pre-commit-style Claude hook blocks the agent from
+     editing .env files to prevent accidental secret leakage.
+
+3.3  Provider abstraction. lib/llm/index.ts is the single swap point; it selects
+     a provider from the LLM_PROVIDER env var. providers/openai.ts is a ready
+     stub so moving off Gemini is: install @langchain/openai, fill the file,
+     flip the env var. No graph/agent code changes.
+
+3.4  LLM assigns, code computes. The model returns items + assignments +
+     tax/tip. The server (and a mirrored client util for editing) computes each
+     person's subtotal and distributes tax/tip proportionally, then reconciles
+     against the receipt total. This guarantees the numbers always add up.
+
+3.5  Persistent members with payer-aware balances (Splitwise-style) rather than
+     ad-hoc names only, so the app can answer "who owes whom" over time.
+
+
+--------------------------------------------------------------------------------
+4. SCREEN-BY-SCREEN BEHAVIOUR
+--------------------------------------------------------------------------------
+
+4.1  HOME
+     - Header with app name; "Total Balance" card showing NET position with a
+       plain-language subtitle ("You are owed more than you owe" / "You owe more
+       than you are owed" / "You're all settled up").
+     - Two columns: "You Owe" and "You Are Owed".
+     - Recent Expenses list (up to 5) with a category emoji inferred from the
+       title, a relative date (Today / Yesterday / weekday / date) and member
+       count. "See all" links to History.
+     - Empty state with a professional icon and a "Split a bill" call-to-action.
+
+4.2  NEW SPLIT (chat screen)  [the + FAB]
+     - ChatGPT-style conversation. Empty state shows large Gallery and Camera
+       buttons in the centre.
+     - Bottom input bar: a "+" that opens a small attach menu (Gallery / Camera),
+       a text field, and a send button.
+     - Members bar: chips of added members (removable) + "Add member" opening a
+       searchable picker. A "Paid by" selector (you + members) persists across
+       the conversation.
+     - The assistant either asks a clarifying question or returns an inline
+       result card with Save / Edit / Share.
+
+4.3  AI RESULT
+     - Shows the full breakdown via the shared SplitSummary (per-person amounts,
+       items, subtotal/tax/tip/total) and a "needs review" banner if totals did
+       not reconcile. Save / Edit / Share actions.
+
+4.4  EDIT SPLIT
+     - Reassign each item to any subset of participants via chips; totals
+       recompute client-side using the same algorithm as the server.
+
+4.5  HISTORY
+     - List of saved splits (date, participant count, thumbnail, total).
+     - Tap to open detail; LONG-PRESS to delete (with confirmation).
+     - "Clear all" action to wipe all history (with confirmation).
+     - Centered empty state when there is nothing saved.
+
+4.6  MEMBERS
+     - Add member input (unchanged core), full-width SEARCH bar with a
+       filter/tune icon opening a bottom sheet.
+     - SORT: Name A-Z, Name Z-A, Recently Added, Balance High->Low, Low->High.
+     - FILTER: All, Owe Me, I Owe, Zero Balance.
+     - Member count in the section header: "YOUR PEOPLE (N)".
+     - Each row shows a clear label: "owes you" (green), "you owe" (red), or
+       "settled up".
+     - Per-row "+" opens a popup to record a repayment (reduces what they owe).
+     - Per-row trash icon deletes the member (with confirmation).
+
+4.7  SETTINGS
+     - Theme mode: Light / Dark / System (persisted).
+     - Backend base URL (editable, persisted) for connecting to the dev server.
+     - "Clear app data" — wipes everything, gated by device lock-screen auth
+       when available.
+     - About section.
+
+
+--------------------------------------------------------------------------------
+5. EDGE CASES AND USER BEHAVIOURS CONSIDERED  (the core of this report)
+--------------------------------------------------------------------------------
+
+The following enumerates, feature by feature, the non-happy-path situations that
+were anticipated and explicitly handled.
+
+5.1  INVOICE / AI SPLIT INPUT
+  (a) Image only, no description.
+      The user uploads a receipt and hits send with no text. The assistant does
+      NOT guess a split; it first describes what it sees on the receipt and asks
+      how to split it and among whom. (In the earlier single-shot flow, this
+      case prompted a confirmation dialog: "we'll split everything equally —
+      continue?", and only then sent an explicit equal-split instruction.)
+  (b) Text only, no image.
+      The user received a paper/PDF invoice and types the details instead of
+      photographing it. The agent works from the typed amounts and asks for any
+      essential missing detail (amounts or who had what) rather than inventing
+      data.
+  (c) Neither image nor text.
+      Blocked with a clear error toast: "Add a receipt photo and describe who
+      bought what."
+  (d) Prompt but no participants selected.
+      Blocked: "Select at least one person to split with."
+  (e) Unassigned items.
+      Any line item the user does not explicitly attribute is split among ALL
+      participants, and every item is guaranteed to appear exactly once (a
+      server-side fill step covers items the model missed).
+  (f) Totals that don't reconcile.
+      After deterministic computation, if the sum of per-person amounts drifts
+      from the receipt total beyond a 1-cent tolerance, the pipeline retries the
+      assignment once; if it still can't reconcile, it returns needsReview=true
+      and the UI shows a warning banner so the user can review/edit.
+  (g) Model can't read a blurry / non-receipt image.
+      The assistant describes what it actually sees and asks for a clearer photo
+      or typed details instead of fabricating items. (Verified live: a solid
+      colour image produced "it looks like a solid green colour — please upload
+      a clear receipt".)
+  (h) Tax / tip present or absent.
+      Tax and tip default to 0 when not printed, and are distributed
+      proportionally to each person's subtotal when present.
+
+5.2  MEMBER MODELLING AND DISAMBIGUATION
+  (a) User mentions names without adding them as members.
+      The agent can still form participants from typed names.
+  (b) Duplicate names.
+      If a mentioned name matches MORE THAN ONE known member (or is ambiguous),
+      the assistant refuses to guess and asks the user to clarify by member id
+      or to add the exact member — avoiding a wrong debt being recorded.
+  (c) Adding a duplicate member in the Members screen.
+      Case-insensitive check; if the name already exists the app shows an info
+      toast ("… is already a member") instead of creating a duplicate.
+  (d) Empty / whitespace member name.
+      Trimmed and rejected silently (no empty members created).
+  (e) Ad-hoc participants not in the saved list.
+      Supported in the split; they simply won't have a persistent member record
+      / running balance unless later added.
+
+5.3  BALANCES AND "WHO PAID"
+  (a) Who actually paid the bill matters.
+      Balances are payer-aware. If YOU paid, each other person's share is money
+      they owe you. If a MEMBER paid, your own share is money you owe them.
+      Bills paid by a third party don't affect that pairwise balance.
+  (b) Default payer.
+      Defaults to "Me" (the device owner) when unspecified, so older/simple
+      splits behave sensibly.
+  (c) Owner is excluded from "who owes you" aggregates.
+      "Me" is matched case-insensitively and never counted as owing themselves.
+  (d) Repayments (partial settle-up).
+      When a member returns some money, the "+" popup records a Payment that
+      reduces what they owe. Over-repayment can flip a balance negative (you owe
+      them), which the UI then labels correctly.
+  (e) Repayment input validation.
+      Non-numeric, zero, or negative amounts are rejected with an error toast;
+      amounts are rounded to 2 decimals.
+  (f) Rounding.
+      All money is rounded to 2 decimals consistently to avoid floating-point
+      drift in displayed totals and balances.
+  (g) Settled state.
+      A zero balance shows "settled up" / a dash rather than "Rs 0.00" noise.
+
+5.4  HISTORY / DELETION
+  (a) Accidental deletion.
+      Deleting a single split (long-press) and "Clear all" both require an
+      explicit confirmation dialog stating it can't be undone.
+  (b) Deleting a member.
+      Requires confirmation ("Are you sure you want to delete <name>?").
+  (c) Empty history vs. empty search.
+      Distinct empty states: "No splits yet" (nothing saved) vs. "No members
+      found." (search matched nothing) so the user isn't confused about why a
+      list is empty.
+
+5.5  CLEAR APP DATA (Settings)
+  (a) Destructive-action confirmation before wiping everything.
+  (b) Lock-screen authentication when available.
+      If the device has biometric/PIN enrolled, the user must authenticate
+      before data is cleared.
+  (c) No lock screen enrolled.
+      The feature deliberately does NOT hard-block users without device auth —
+      it proceeds after confirmation. Unexpected auth errors also fall back to
+      allowing the action rather than trapping the user.
+
+5.6  SEARCH / SORT / FILTER (Members)
+  (a) Real-time filtering as the user types; a clear (x) button to reset.
+  (b) Filter icon opens a bottom sheet (options are never crammed on-screen).
+  (c) Active-filter indication: the filter icon highlights when sort/filter are
+      non-default.
+  (d) No-result state after searching/filtering shows "No members found."
+  (e) Reusable primitives (SearchBar, BottomSheet, OptionSheet) so the same
+      search/sort/filter pattern can be reused on future screens.
+
+5.7  THEMING (Light / Dark / System)
+  (a) System mode follows the OS scheme live; explicit light/dark overrides it.
+  (b) Chosen mode is persisted to local storage and restored on restart.
+  (c) No hardcoded colours in screens — everything reads design tokens, so both
+      themes render correctly, including the brand palette
+      (#6cbd32 / #89ca5b / white / light grey) and semantic owe/owed colours.
+  (d) Status bar style flips with the resolved scheme.
+
+5.8  SAFE AREA / LAYOUT
+  (a) Notch / status-bar / home-indicator handling: the tab section is wrapped
+      once in a top SafeAreaView at the tabs root; stack screens rely on their
+      native headers' own insets to avoid double padding.
+  (b) The custom bottom tab bar pads for the bottom inset so the FAB and labels
+      clear the home indicator.
+  (c) Keyboard: the chat screen uses KeyboardAvoidingView so the input bar isn't
+      hidden by the keyboard; lists keep taps working while the keyboard is open.
+
+5.9  NETWORK / BACKEND
+  (a) Backend unreachable or wrong URL.
+      HTTP/network failures surface as an error toast and an inline assistant
+      error bubble ("Analysis failed / Something went wrong"), never a silent
+      hang. The user can change the backend base URL in Settings.
+  (b) Device-vs-machine networking.
+      The app defaults the backend URL to the Metro dev host's LAN IP on port
+      3000, so a physical device can reach the developer's machine; it's
+      overridable in Settings.
+  (c) Server error payloads.
+      The client parses the server's { error } message and shows it to the user
+      instead of a generic status code where possible.
+  (d) Malformed request body / no messages.
+      The chat endpoint validates the body with Zod and returns 400 with a clear
+      message; the split endpoint rejects a missing image (400).
+  (e) CORS.
+      API routes send permissive CORS headers and handle OPTIONS preflight so
+      the app (a different origin in dev) can call them.
+
+5.10 LLM PROVIDER / MODEL AVAILABILITY (real issues encountered and handled)
+  (a) Missing API key.
+      getModel() throws a clear, actionable error ("GEMINI_API_KEY is not set.
+      Add it to splitit-server/.env.local"); /api/health still reports reachable.
+  (b) Quota exhaustion (HTTP 429).
+      Gemini free-tier limits are low; the app/back-end surface the quota error
+      rather than crashing. Guidance: wait or switch GEMINI_MODEL to a
+      lighter/free model. The model name is configurable via env — no code
+      change needed.
+  (c) Model no longer available to new accounts (HTTP 404).
+      Encountered with gemini-2.5-flash. Resolved by pinning an explicit,
+      currently-available vision model (gemini-3.5-flash) and documenting
+      fallbacks (gemini-3.1-flash-lite, gemini-3-flash-preview). We avoid the
+      "*-latest" floating alias because it can resolve to a variant that rejects
+      image input.
+  (d) Vision vs. text-only models.
+      The provider comment and .env.example note that the model MUST be
+      vision-capable to read invoice photos.
+
+5.11 IMAGES
+  (a) Camera vs. gallery permissions.
+      Both are requested on demand; if denied, an error toast explains why the
+      action can't proceed instead of failing silently.
+  (b) Image size / payload.
+      Photos are captured/picked at reduced quality (~0.5) and sent as base64
+      data URLs to keep request sizes reasonable.
+  (c) Mixed formats.
+      MIME type is inferred (jpeg/png/webp/heic) for correct data URLs; a
+      sensible default is used when unknown.
+  (d) Transparent logo on splash/icon.
+      The app logo is a transparent PNG placed on a black splash/adaptive icon
+      background; the report notes iOS flattens transparent app icons, so a
+      solid-background variant may be needed for the iOS icon specifically.
+
+5.12 STATE / DATA INTEGRITY
+  (a) First launch / empty storage.
+      The store loads all collections in parallel and exposes a "ready" flag;
+      missing keys default to empty arrays (no crashes on a fresh install).
+  (b) Corrupt/unparseable stored JSON.
+      The storage wrapper catches parse errors and returns the provided fallback
+      instead of throwing.
+  (c) Draft handoff between screens.
+      The in-progress split ("draft") is held in a dedicated context so large
+      objects/images are not serialized through navigation params; it's cleared
+      after save.
+  (d) Editing without a draft / opening result with no draft.
+      Screens guard against a missing draft and show a graceful message instead
+      of crashing.
+  (e) Viewing a split id that no longer exists.
+      The detail screen shows "Split not found." rather than erroring.
+  (f) Swappable persistence.
+      All storage goes through a thin wrapper + repositories, so AsyncStorage
+      could later be replaced with SQLite without touching screens.
+
+
+--------------------------------------------------------------------------------
+6. SHARING
+--------------------------------------------------------------------------------
+
+Any split can be shared as a formatted text summary (title, per-person amounts,
+total, tax/tip) via the native share sheet, which routes to WhatsApp, Messages,
+etc. Share is available on the result card, the edit flow, and the saved-split
+detail. Share failures are caught and surfaced as a toast.
+
+
+--------------------------------------------------------------------------------
+7. RESILIENCE / UX POLISH SUMMARY
+--------------------------------------------------------------------------------
+
+  * Toasts for every meaningful event and error (saves, deletes, shares,
+    validation failures, network/AI errors) — the user is never left guessing.
+  * Confirmation dialogs on every destructive action (delete member, delete
+    split, clear history, clear app data).
+  * Professional iconography (Ionicons) and consistent, centered empty states.
+  * Reusable, theme-aware component kit ensures visual and behavioural
+    consistency across screens and future features.
+
+
+--------------------------------------------------------------------------------
+8. TOOLING, QUALITY, AND SECURITY
+--------------------------------------------------------------------------------
+
+  * Pre/Post Claude Code hooks: a PreToolUse hook blocks edits to secret .env
+    files; a PostToolUse hook reminds to typecheck the changed project.
+  * A project skill scaffolds new theme-aware screens following conventions.
+  * Every change was validated with TypeScript (tsc --noEmit) and lint (expo
+    lint / eslint) on both the app and the server.
+  * The backend was smoke-tested live end-to-end (health, split, and chat with a
+    real image) to confirm the vision pipeline works with the configured model.
+  * Secrets: real API keys are kept only in .env.local (gitignored); .env.example
+    documents the required variables with safe placeholders.
+
+
+--------------------------------------------------------------------------------
+9. KNOWN LIMITATIONS / FUTURE WORK
+--------------------------------------------------------------------------------
+
+  * Free-tier Gemini rate limits (RPM/daily) can cause 429s under heavy use;
+    production use would need a paid key or a lighter model.
+  * Recorded repayments are a running log; they aren't yet shown in History or
+    individually reversible (only "Clear app data" wipes them).
+  * The aggregate Home summary approximates repayments against the total owed;
+    per-member balances remain exact.
+  * iOS app icons can't be transparent; a solid-background icon variant may be
+    required for the store build.
+  * Mid-conversation image attachment relies on the input "+"; the very first
+    attachment can also be made from the empty-state buttons.
+
+================================================================================
+END OF REPORT
+================================================================================
