@@ -1,0 +1,70 @@
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
+
+import { Colors } from '@/constants/theme';
+import { AppStoreProvider } from '@/store/app-store';
+import { FlowProvider } from '@/store/flow-context';
+import { ThemeModeProvider, useResolvedScheme } from '@/store/theme-context';
+
+SplashScreen.preventAutoHideAsync();
+
+function Navigation() {
+  const scheme = useResolvedScheme();
+  const colors = Colors[scheme];
+
+  const navTheme = {
+    ...(scheme === 'dark' ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(scheme === 'dark' ? DarkTheme : DefaultTheme).colors,
+      primary: colors.primary,
+      background: colors.background,
+      card: colors.background,
+      text: colors.text,
+      border: colors.border,
+    },
+  };
+
+  return (
+    <ThemeProvider value={navTheme}>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="upload" options={{ headerShown: true, title: 'New split', presentation: 'card' }} />
+        <Stack.Screen name="result" options={{ headerShown: true, title: 'AI Result' }} />
+        <Stack.Screen name="edit" options={{ headerShown: true, title: 'Edit split' }} />
+        <Stack.Screen name="split/[id]" options={{ headerShown: true, title: 'Split' }} />
+      </Stack>
+    </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  useEffect(() => {
+    SplashScreen.hideAsync();
+  }, []);
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeModeProvider>
+          <AppStoreProvider>
+            <FlowProvider>
+              <Navigation />
+              <Toast />
+            </FlowProvider>
+          </AppStoreProvider>
+        </ThemeModeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}

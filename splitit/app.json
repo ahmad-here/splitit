@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "splitit",
+    "slug": "splitit",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/app-logo.png",
+    "scheme": "splitit",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/images/app-logo.png"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/images/app-logo.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.ahmad_ch909.splitit"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#000000",
+          "image": "./assets/images/app-logo.png",
+          "imageWidth": 200,
+          "dark": {
+            "backgroundColor": "#000000",
+            "image": "./assets/images/app-logo.png",
+            "imageWidth": 200
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b69d230a-d48d-49ae-a03b-9a48b8419284"
+      }
+    }
+  }
+}
