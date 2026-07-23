@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useRef } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ResultCard } from '@/components/chat/result-card';
@@ -10,13 +10,20 @@ import { ThemedText } from '@/components/themed-text';
 import { Chip } from '@/components/ui/chip';
 import { Spacing } from '@/constants/theme';
 import { useChat } from '@/helpers/use-chat';
+import { useKeyboardHeight } from '@/hooks/use-keyboard-height';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function ChatScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const scrollRef = useRef<ScrollView>(null);
   const c = useChat();
+
+  // Keep the latest message visible when the keyboard opens.
+  useEffect(() => {
+    if (keyboardHeight > 0) scrollRef.current?.scrollToEnd({ animated: true });
+  }, [keyboardHeight]);
 
   const {
     messages,
@@ -33,11 +40,7 @@ export default function ChatScreen() {
   const isEmpty = messages.length === 0;
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
+    <View style={{ flex: 1, backgroundColor: theme.background, paddingBottom: keyboardHeight }}>
       {/* Members bar */}
       <View style={[styles.membersBar, { borderBottomColor: theme.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.membersRow}>
@@ -166,7 +169,17 @@ export default function ChatScreen() {
       ) : null}
 
       {/* Input bar */}
-      <View style={[styles.inputBar, { borderTopColor: theme.border, paddingBottom: insets.bottom + Spacing.two }]}>
+      <View
+        style={[
+          styles.inputBar,
+          {
+            borderTopColor: theme.border,
+            // The container already lifts by keyboardHeight; only add the
+            // home-indicator inset when the keyboard is closed.
+            paddingBottom: keyboardHeight > 0 ? Spacing.two : insets.bottom + Spacing.two,
+          },
+        ]}
+      >
         <Pressable
           hitSlop={6}
           onPress={c.toggleAttach}
@@ -195,7 +208,7 @@ export default function ChatScreen() {
       </View>
 
       <MemberPicker visible={pickerVisible} onClose={() => c.setPickerVisible(false)} selected={members} onChange={c.setMembers} />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

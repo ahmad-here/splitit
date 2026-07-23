@@ -1,9 +1,10 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Design tokens: colors (light + dark), fonts and spacing.
+ *
+ * NOTE: the Expo starter imported '@/global.css' here. NativeWind is not
+ * installed in this project, so that import was dead weight and a risk in
+ * release bundles — it has been removed.
  */
-
-import '@/global.css';
 
 import { Platform } from 'react-native';
 

@@ -13,6 +13,15 @@ import { ThemeModeProvider, useResolvedScheme } from '@/store/theme-context';
 
 SplashScreen.preventAutoHideAsync();
 
+// Safety net: never let a render error leave the user stuck on the splash
+// screen forever. If the tree mounts normally the effect below hides it first.
+setTimeout(() => {
+  SplashScreen.hideAsync().catch(() => {});
+}, 4000);
+
+/** Surfaces render errors instead of hanging on the splash screen. */
+export { ErrorBoundary } from 'expo-router';
+
 function Navigation() {
   const scheme = useResolvedScheme();
   const colors = Colors[scheme];
@@ -50,7 +59,7 @@ function Navigation() {
 
 export default function RootLayout() {
   useEffect(() => {
-    SplashScreen.hideAsync();
+    SplashScreen.hideAsync().catch(() => {});
   }, []);
 
   return (

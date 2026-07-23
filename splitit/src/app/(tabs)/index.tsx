@@ -19,12 +19,6 @@ export default function HomeScreen() {
 
   return (
     <Screen>
-      <View style={styles.header}>
-        <ThemedText type="smallBold" style={styles.brand}>
-          Splitit
-        </ThemedText>
-      </View>
-
       {/* Total balance card */}
       <Card style={[styles.hero, { backgroundColor: theme.primary }]}>
         <View style={styles.heroTop}>
@@ -91,7 +85,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingBottom: Spacing.three },
   brand: { fontSize: 18 },
-  hero: { gap: Spacing.one, paddingVertical: Spacing.four },
+  hero: { gap: Spacing.one, paddingVertical: Spacing.four, marginTop: Spacing.four },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   heroEmoji: { fontSize: 18 },
   heroLabel: { color: '#ffffffcc' },
