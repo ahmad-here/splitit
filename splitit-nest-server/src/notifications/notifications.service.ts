@@ -57,6 +57,14 @@ export class NotificationsService {
       .slice(0, 100);
   }
 
+  /** Delete all of the recipient's notifications. */
+  async clearAll(uid: string): Promise<void> {
+    const snap = await this.col.where('recipientId', '==', uid).get();
+    const batch = this.firebase.db.batch();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+
   async markRead(uid: string, id: string): Promise<void> {
     const ref = this.col.doc(id);
     const snap = await ref.get();
@@ -66,16 +74,17 @@ export class NotificationsService {
   }
 
   /** Reminder button: nudge a friend about money they owe the sender. */
-  async remind(uid: string, friendId: string, amount?: number, note?: string): Promise<void> {
+  async remind(uid: string, friendId: string, amount?: number, note?: string, currency?: string): Promise<void> {
     const me = await this.profiles.ensure(uid);
-    const name = [me.firstName, me.lastName].filter(Boolean).join(' ') || 'A friend';
-    const amountText = typeof amount === 'number' ? ` of ${amount}` : '';
+    const name = [me.firstName, me.lastName].filter(Boolean).join(' ').trim() || 'A friend';
+    const cur = currency && currency !== '$' ? `${currency.trim()} ` : currency ?? '';
+    const amountText = typeof amount === 'number' ? ` ${cur}${amount}` : ' some money';
     await this.notify({
       recipientId: friendId,
       actorId: uid,
       type: 'reminder',
       title: 'Payment reminder',
-      body: note?.trim() ? note.trim() : `${name} reminded you about a pending payment${amountText}.`,
+      body: note?.trim() ? note.trim() : `⏰ ${name} is reminding you about${amountText} you still owe.`,
       data: { fromId: uid, amount: amount ?? null },
     });
   }

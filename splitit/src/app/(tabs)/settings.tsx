@@ -84,13 +84,6 @@ export default function SettingsScreen() {
         ) : null}
         <Button title="Log out" variant="secondary" onPress={() => signOut()} />
       </Card>
-
-      <SectionHeader title="About" />
-      <Card>
-        <ThemedText type="small" themeColor="textSecondary">
-          Splitit — AI bill splitting. Upload a receipt, describe who bought what, and share the split.
-        </ThemedText>
-      </Card>
     </Screen>
   );
 }

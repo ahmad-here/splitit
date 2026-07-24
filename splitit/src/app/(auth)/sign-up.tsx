@@ -47,10 +47,10 @@ export default function SignUpScreen() {
 
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
-          <TextField label="First name" value={firstName} onChangeText={setFirstName} placeholder="Ahmad" />
+          <TextField label="First name" value={firstName} onChangeText={setFirstName} placeholder="FirstName" />
         </View>
         <View style={{ flex: 1 }}>
-          <TextField label="Last name" value={lastName} onChangeText={setLastName} placeholder="Ali" />
+          <TextField label="Last name" value={lastName} onChangeText={setLastName} placeholder="LastName" />
         </View>
       </View>
       <TextField

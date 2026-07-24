@@ -1,13 +1,9 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
+import { MemberCard } from '@/components/member-card';
 import { ThemedText } from '@/components/themed-text';
-import { formatAmount } from '@/components/ui/amount-text';
-import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { ListItem } from '@/components/ui/list-item';
 import { OptionSheet } from '@/components/ui/option-sheet';
 import { Screen } from '@/components/ui/screen';
 import { SearchBar } from '@/components/ui/search-bar';
@@ -62,51 +58,20 @@ export default function MembersScreen() {
       ) : noResults ? (
         <EmptyState icon="search-outline" title="No members found." />
       ) : (
-        <>
-          <Card>
-              {m.visible.map((f) => {
-                const bal = m.balances.get(f.id) ?? 0;
-                const label = bal > 0 ? 'owes you' : bal < 0 ? 'you owe' : 'settled up';
-                const color = bal > 0 ? theme.owed : bal < 0 ? theme.owe : theme.muted;
-                return (
-                  <ListItem
-                    key={f.id}
-                    title={f.name}
-                    subtitle={label}
-                    left={<Avatar name={f.name} size={36} />}
-                    right={
-                      <View style={styles.right}>
-                        <ThemedText type="smallBold" style={{ color }}>
-                          {bal === 0 ? '—' : formatAmount(Math.abs(bal))}
-                        </ThemedText>
-                        <Pressable
-                          hitSlop={8}
-                          onPress={() => m.openSettle(f)}
-                          accessibilityLabel={`Record a payment from ${f.name}`}
-                          style={[styles.settleBtn, { borderColor: theme.primary }]}
-                        >
-                          <Ionicons name="add" size={18} color={theme.primary} />
-                        </Pressable>
-                        {f.profileId && bal > 0 ? (
-                          <Pressable
-                            hitSlop={8}
-                            onPress={() => m.remind(f)}
-                            accessibilityLabel={`Remind ${f.name}`}
-                            style={[styles.settleBtn, { borderColor: theme.primary }]}
-                          >
-                            <Ionicons name="notifications-outline" size={16} color={theme.primary} />
-                          </Pressable>
-                        ) : null}
-                        <Pressable hitSlop={8} onPress={() => m.confirmDelete(f)} accessibilityLabel={`Delete ${f.name}`}>
-                          <Ionicons name="trash-outline" size={18} color={theme.muted} />
-                        </Pressable>
-                      </View>
-                    }
-                  />
-                );
-              })}
-          </Card>
-        </>
+        m.visible.map((f) => {
+          const bal = m.balances.get(f.id) ?? 0;
+          return (
+            <MemberCard
+              key={f.id}
+              friend={f}
+              balance={bal}
+              canRemind={!!f.profileId && bal > 0}
+              onSettle={() => m.openSettle(f)}
+              onRemind={() => m.remind(f)}
+              onDelete={() => m.confirmDelete(f)}
+            />
+          );
+        })
       )}
 
       <OptionSheet

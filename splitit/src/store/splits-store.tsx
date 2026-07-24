@@ -4,6 +4,7 @@
  * posts it (which also uploads the receipt and notifies linked participants).
  */
 
+import { collection, query, where } from 'firebase/firestore';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import {
@@ -11,8 +12,11 @@ import {
   listSplitsRemote,
   saveSplitRemote,
 } from '@/api/splits-client';
+import { env } from '@/config/env';
+import { db } from '@/db/firestore';
 import type { SplitRecord, SplitResult } from '@/db/models';
 import { useAuth } from '@/store/auth-store';
+import { useRealtimeRefresh } from '@/helpers/use-realtime';
 
 export type SaveSplitMeta = {
   title: string;
@@ -40,6 +44,7 @@ const SplitsContext = createContext<SplitsValue | undefined>(undefined);
 export function SplitsProvider({ children }: { children: React.ReactNode }) {
   const { user, emailVerified } = useAuth();
   const active = !!user && emailVerified;
+  const uid = user?.uid ?? null;
   const [splits, setSplits] = useState<SplitRecord[]>([]);
 
   const refresh = useCallback(async () => {
@@ -58,6 +63,19 @@ export function SplitsProvider({ children }: { children: React.ReactNode }) {
     refresh();
   }, [refresh]);
 
+  // Live updates: splits I own or am a participant in (e.g. someone adds me).
+  useRealtimeRefresh(
+    () =>
+      active && uid
+        ? [
+            query(collection(db, 'splits'), where('participantIds', 'array-contains', uid)),
+            query(collection(db, 'splits'), where('ownerId', '==', uid)),
+          ]
+        : null,
+    refresh,
+    [active, uid],
+  );
+
   const saveSplit = useCallback(async (result: SplitResult, meta: SaveSplitMeta) => {
     const res = await saveSplitRemote({
       ...result,
@@ -65,6 +83,7 @@ export function SplitsProvider({ children }: { children: React.ReactNode }) {
       title: meta.title,
       description: meta.description,
       paidBy: meta.paidBy,
+      currency: env.currency,
       participantLinks: meta.participantLinks,
       invoiceImage: meta.invoiceImageUri,
     });

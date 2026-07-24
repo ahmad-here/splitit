@@ -5,6 +5,7 @@
 
 import { formatAmount } from '@/components/ui/amount-text';
 import { balanceSummary } from '@/db/balances';
+import { useAuth } from '@/store/auth-store';
 import { usePayments } from '@/store/payments-store';
 import { useSplits } from '@/store/splits-store';
 import { categoryEmoji, relativeDate } from '@/utils/format';
@@ -22,8 +23,10 @@ export type RecentExpense = {
 export function useHome() {
   const { splits } = useSplits();
   const { payments } = usePayments();
+  const { user } = useAuth();
+  const meId = user?.uid ?? '';
 
-  const { owed, owe, net } = balanceSummary(splits, payments);
+  const { owed, owe, net } = balanceSummary(splits, payments, meId);
 
   const netLabel =
     net > 0 ? 'You are owed more than you owe' : net < 0 ? 'You owe more than you are owed' : "You're all settled up";

@@ -23,7 +23,7 @@ type Props = { visible: boolean; onClose: () => void };
 export function NotificationsDrawer({ visible, onClose }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { notifications, refresh, markRead } = useNotifications();
+  const { notifications, refresh, markRead, clearAll } = useNotifications();
 
   useEffect(() => {
     if (visible) refresh();
@@ -36,13 +36,22 @@ export function NotificationsDrawer({ visible, onClose }: Props) {
         <Animated.View
           entering={SlideInRight.duration(220)}
           exiting={SlideOutRight.duration(180)}
-          style={[styles.panel, { backgroundColor: theme.background, paddingTop: insets.top + Spacing.two }]}
+          style={[styles.panel, { backgroundColor: '#000', paddingTop: insets.top + Spacing.two }]}
         >
           <View style={styles.header}>
             <ThemedText type="smallBold">Notifications</ThemedText>
-            <Pressable hitSlop={8} onPress={onClose} accessibilityLabel="Close">
-              <Ionicons name="close" size={22} color={theme.text} />
-            </Pressable>
+            <View style={styles.headerActions}>
+              {notifications.length > 0 ? (
+                <Pressable hitSlop={8} onPress={clearAll} accessibilityLabel="Clear all">
+                  <ThemedText type="small" themeColor="primary">
+                    Clear all
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+              <Pressable hitSlop={8} onPress={onClose} accessibilityLabel="Close">
+                <Ionicons name="close" size={22} color={theme.text} />
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + Spacing.three }}>
@@ -89,6 +98,7 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.two },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   iconWrap: { width: 28, alignItems: 'center', justifyContent: 'center' },
   dot: { position: 'absolute', top: -2, right: 0, width: 8, height: 8, borderRadius: 4 },
 });

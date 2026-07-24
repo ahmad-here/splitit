@@ -9,6 +9,7 @@ import { Alert } from 'react-native';
 
 import { getMyProfile, redeemCode } from '@/api/members-client';
 import { remindMember } from '@/api/notifications-client';
+import { env } from '@/config/env';
 import { balanceForFriend } from '@/db/balances';
 import type { Friend } from '@/db/models';
 import { useAuth } from '@/store/auth-store';
@@ -42,9 +43,10 @@ export function useMembersScreen() {
   const [received, setReceived] = useState(''); // member paid you back
   const [given, setGiven] = useState(''); // you paid the member
 
+  const meId = user?.uid ?? '';
   const balances = useMemo(
-    () => new Map(friends.map((f) => [f.id, balanceForFriend(splits, f, payments)])),
-    [friends, splits, payments],
+    () => new Map(friends.map((f) => [f.id, balanceForFriend(splits, f, payments, meId)])),
+    [friends, splits, payments, meId],
   );
 
   const visible = useMemo(
@@ -93,7 +95,7 @@ export function useMembersScreen() {
     }
     const owed = balances.get(friend.id) ?? 0;
     try {
-      await remindMember(friend.profileId, owed > 0 ? owed : undefined);
+      await remindMember(friend.profileId, owed > 0 ? owed : undefined, undefined, env.currency);
       toast.success('Reminder sent', friend.name);
     } catch (err) {
       toast.error('Could not send reminder', err instanceof Error ? err.message : undefined);

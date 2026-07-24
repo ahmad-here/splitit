@@ -40,12 +40,22 @@ export class SplitsService {
       .map((p) => p.profileId)
       .filter((id): id is string => !!id && id !== uid);
 
+    // Resolve who paid to a profileId so balances are name-independent.
+    // "Me"/blank => the owner; otherwise match a participant by name.
+    const payerName = (input.paidBy ?? '').trim();
+    let paidById: string | null = uid;
+    if (payerName && payerName.toLowerCase() !== 'me') {
+      const match = participants.find((p) => p.name.trim().toLowerCase() === payerName.toLowerCase());
+      paidById = match?.profileId ?? null;
+    }
+
     const doc = {
       ownerId: uid,
       title: input.title,
       description: input.description ?? null,
       currency: input.currency,
       paidBy: input.paidBy ?? null,
+      paidById,
       subtotal: input.subtotal,
       tax: input.tax,
       tip: input.tip,
@@ -63,7 +73,11 @@ export class SplitsService {
     await ref.set(doc, { merge: true });
 
     // Fan out notifications (best-effort; never blocks the save).
-    const ownerName = [owner.firstName, owner.lastName].filter(Boolean).join(' ') || 'Someone';
+    const ownerName = [owner.firstName, owner.lastName].filter(Boolean).join(' ').trim() || 'A friend';
+    const cur = input.currency && input.currency !== '$' ? `${input.currency.trim()} ` : input.currency ?? '';
+    // Use the bill's name, unless it's blank or an auto "Split · <date>" title.
+    const rawTitle = (input.title || '').trim();
+    const niceTitle = !rawTitle || /^split\s*·/i.test(rawTitle) ? 'a bill' : `“${rawTitle}”`;
     await Promise.all(
       participants
         .filter((p) => p.profileId && p.profileId !== uid)
@@ -72,8 +86,8 @@ export class SplitsService {
             recipientId: p.profileId as string,
             actorId: uid,
             type: 'split_added',
-            title: 'Added to a split',
-            body: `${ownerName} added you to "${input.title || 'a bill'}" — your share is ${p.amount}.`,
+            title: 'New split',
+            body: `👋 ${ownerName} added you to ${niceTitle} — your share is ${cur}${p.amount}.`,
             data: { splitId: ref.id, amount: p.amount },
           }),
         ),
@@ -118,7 +132,7 @@ export type AppSplitRecord = {
   description?: string;
   items: unknown[];
   assignments: unknown[];
-  perPerson: { name: string; amount: number }[];
+  perPerson: { name: string; amount: number; profileId?: string | null }[];
   participants: string[];
   subtotal: number;
   tax: number;
@@ -126,20 +140,24 @@ export type AppSplitRecord = {
   total: number;
   needsReview: boolean;
   paidBy?: string;
+  paidById?: string | null;
+  ownerId: string;
   invoiceImageUri?: string;
   createdAt: string;
 };
 
 function toAppRecord(id: string, data: FirebaseFirestore.DocumentData): AppSplitRecord {
-  const participants = (data.participants ?? []) as { name: string; amount: number }[];
+  const participants = (data.participants ?? []) as { name: string; amount: number; profileId?: string | null }[];
   return {
     id,
     title: String(data.title ?? ''),
     description: data.description ?? undefined,
     items: data.items ?? [],
     assignments: data.assignments ?? [],
-    perPerson: participants.map((p) => ({ name: p.name, amount: p.amount })),
+    perPerson: participants.map((p) => ({ name: p.name, amount: p.amount, profileId: p.profileId ?? null })),
     participants: participants.map((p) => p.name),
+    ownerId: String(data.ownerId ?? ''),
+    paidById: data.paidById ?? null,
     subtotal: Number(data.subtotal ?? 0),
     tax: Number(data.tax ?? 0),
     tip: Number(data.tip ?? 0),

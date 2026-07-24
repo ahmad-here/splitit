@@ -42,6 +42,8 @@ export type Assignment = {
 export type PerPerson = {
   name: string;
   amount: number;
+  /** Linked friend's profileId when this participant is a real user. */
+  profileId?: string | null;
 };
 
 /** The split result (from the backend or after manual edits). */
@@ -70,6 +72,10 @@ export type SplitRecord = SplitResult & {
   participants: string[];
   /** Who paid the bill. Defaults to the device owner ("Me"). */
   paidBy?: string;
+  /** Payer resolved to a profileId (owner's uid when "Me" paid). */
+  paidById?: string | null;
+  /** The split creator's uid (owner). */
+  ownerId?: string;
   createdAt: string;
 };
 

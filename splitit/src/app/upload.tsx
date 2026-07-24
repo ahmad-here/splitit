@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { Stack } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller';
+import { KeyboardStickyView, useKeyboardState } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import { ThemedText } from '@/components/themed-text';
 import { OptionSheet } from '@/components/ui/option-sheet';
 import { Spacing } from '@/constants/theme';
 import { useChat } from '@/helpers/use-chat';
+import { useFriends } from '@/store/friends-store';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function ChatScreen() {
@@ -21,9 +22,25 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const c = useChat();
+  const { friends } = useFriends();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paidByOpen, setPaidByOpen] = useState(false);
   const keyboardVisible = useKeyboardState().isVisible;
+
+  // @-mention: when the text ends with "@partial", suggest linked friends.
+  const mentionMatch = /(^|\s)@(\w*)$/.exec(c.input);
+  const mentionQuery = mentionMatch ? mentionMatch[2].toLowerCase() : null;
+  const mentionSuggestions =
+    mentionQuery === null
+      ? []
+      : friends.filter((f) => f.name.toLowerCase().includes(mentionQuery)).slice(0, 5);
+
+  function applyMention(f: { id: string; name: string }) {
+    // Replace the trailing "@partial" with the friend's name.
+    c.setInput(c.input.replace(/(^|\s)@(\w*)$/, (_m, pre) => `${pre}${f.name} `));
+    // Ensure they're a participant of this split.
+    if (!c.members.some((m) => m.id === f.id)) c.setMembers([...c.members, { id: f.id, name: f.name }]);
+  }
 
   // Keep the latest message visible when the keyboard opens.
   useEffect(() => {
@@ -45,7 +62,7 @@ export default function ChatScreen() {
   const isEmpty = messages.length === 0;
 
   return (
-    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: theme.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Header button (right) to open the chat history menu. */}
       <Stack.Screen
         options={{
@@ -165,6 +182,7 @@ export default function ChatScreen() {
         </ScrollView>
       )}
 
+      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
       {/* Staged image preview */}
       {staged ? (
         <View style={[styles.stagedRow, { borderTopColor: theme.border }]}>
@@ -190,6 +208,20 @@ export default function ChatScreen() {
             <Ionicons name="camera-outline" size={22} color={theme.primary} />
             <ThemedText type="small">Camera</ThemedText>
           </Pressable>
+        </View>
+      ) : null}
+
+      {/* @-mention suggestions */}
+      {mentionSuggestions.length > 0 ? (
+        <View style={[styles.mentionBar, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
+          {mentionSuggestions.map((f) => (
+            <Pressable key={f.id} style={styles.mentionItem} onPress={() => applyMention(f)}>
+              <Ionicons name="at" size={16} color={theme.primary} />
+              <ThemedText type="small" numberOfLines={1}>
+                {f.name}
+              </ThemedText>
+            </Pressable>
+          ))}
         </View>
       ) : null}
 
@@ -231,6 +263,7 @@ export default function ChatScreen() {
           <Ionicons name="arrow-up" size={22} color={theme.onPrimary} />
         </Pressable>
       </View>
+      </KeyboardStickyView>
 
       <MemberPicker visible={pickerVisible} onClose={() => c.setPickerVisible(false)} selected={members} onChange={c.setMembers} />
 
@@ -257,7 +290,7 @@ export default function ChatScreen() {
         onNewChat={c.newChat}
         onSelect={c.openChat}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -280,6 +313,8 @@ const styles = StyleSheet.create({
   },
   paidDropdown: {},
   dropdownLabel: { flex: 1 },
+  mentionBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: Spacing.one },
+  mentionItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four, gap: Spacing.two },
   emptyTitle: { textAlign: 'center' },

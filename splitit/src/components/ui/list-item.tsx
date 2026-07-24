@@ -19,9 +19,11 @@ export function ListItem({ title, subtitle, left, right, onPress, onLongPress }:
     <View style={[styles.row, { borderColor: theme.border }]}>
       {left ? <View style={styles.left}>{left}</View> : null}
       <View style={styles.center}>
-        <ThemedText type="smallBold">{title}</ThemedText>
+        <ThemedText type="smallBold" numberOfLines={1} ellipsizeMode="tail">
+          {title}
+        </ThemedText>
         {subtitle ? (
-          <ThemedText type="small" themeColor="textSecondary">
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} ellipsizeMode="tail">
             {subtitle}
           </ThemedText>
         ) : null}
@@ -46,7 +48,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.three,
   },
   left: {},
-  center: { flex: 1, gap: 2 },
-  right: {},
+  center: { flex: 1, gap: 2, minWidth: 0 },
+  right: { flexShrink: 0 },
   pressed: { opacity: 0.6 },
 });

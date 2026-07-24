@@ -5,11 +5,14 @@
  * don't re-render splits/payments consumers (ISP).
  */
 
+import { collection } from 'firebase/firestore';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { listMembers, unfriend as unfriendRemote } from '@/api/members-client';
+import { db } from '@/db/firestore';
 import type { Friend } from '@/db/models';
 import { useAuth } from '@/store/auth-store';
+import { useRealtimeRefresh } from '@/helpers/use-realtime';
 
 type FriendsValue = {
   friends: Friend[];
@@ -23,6 +26,7 @@ const FriendsContext = createContext<FriendsValue | undefined>(undefined);
 export function FriendsProvider({ children }: { children: React.ReactNode }) {
   const { user, emailVerified } = useAuth();
   const active = !!user && emailVerified;
+  const uid = user?.uid ?? null;
   const [friends, setFriends] = useState<Friend[]>([]);
 
   const refresh = useCallback(async () => {
@@ -49,6 +53,13 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Live updates: when someone links to me (or a friendship changes), re-pull.
+  useRealtimeRefresh(
+    () => (active && uid ? [collection(db, 'friendships', uid, 'friends')] : null),
+    refresh,
+    [active, uid],
+  );
 
   const removeFriend = useCallback(async (profileId: string) => {
     setFriends((prev) => prev.filter((f) => f.id !== profileId));

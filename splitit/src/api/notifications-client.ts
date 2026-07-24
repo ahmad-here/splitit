@@ -24,9 +24,19 @@ export function markNotificationRead(id: string): Promise<{ ok: true }> {
   return httpClient.postJson<{ ok: true }>(`/api/notifications/${id}/read`, {});
 }
 
+/** Delete all of my notifications. */
+export function clearNotifications(): Promise<{ ok: true }> {
+  return httpClient.delete<{ ok: true }>('/api/notifications');
+}
+
 /** Reminder button on a member card. */
-export function remindMember(friendId: string, amount?: number, note?: string): Promise<{ ok: true }> {
-  return httpClient.postJson<{ ok: true }>('/api/notifications/remind', { friendId, amount, note });
+export function remindMember(
+  friendId: string,
+  amount?: number,
+  note?: string,
+  currency?: string,
+): Promise<{ ok: true }> {
+  return httpClient.postJson<{ ok: true }>('/api/notifications/remind', { friendId, amount, note, currency });
 }
 
 /** Register this device's Expo push token. */

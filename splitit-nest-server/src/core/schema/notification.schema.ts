@@ -22,6 +22,8 @@ export const RemindSchema = z.object({
   friendId: z.string(),
   amount: z.number().optional(),
   note: z.string().optional(),
+  /** Currency prefix for the amount, e.g. "Rs " or "$". */
+  currency: z.string().optional(),
 });
 export type Remind = z.infer<typeof RemindSchema>;
 

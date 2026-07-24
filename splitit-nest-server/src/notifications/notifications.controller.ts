@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/current-user.decorator';
 import { FirebaseAuthGuard } from '../auth/firebase-auth.guard';
@@ -17,6 +17,13 @@ export class NotificationsController {
     return this.notifications.list(uid);
   }
 
+  /** Clear (delete) all of my notifications. */
+  @Delete()
+  async clearAll(@CurrentUser() uid: string): Promise<{ ok: true }> {
+    await this.notifications.clearAll(uid);
+    return { ok: true };
+  }
+
   /** Mark one of my notifications as read. */
   @Post(':id/read')
   async markRead(@CurrentUser() uid: string, @Param('id') id: string): Promise<{ ok: true }> {
@@ -30,7 +37,7 @@ export class NotificationsController {
     @CurrentUser() uid: string,
     @Body(new ZodValidationPipe(RemindSchema)) body: Remind,
   ): Promise<{ ok: true }> {
-    await this.notifications.remind(uid, body.friendId, body.amount, body.note);
+    await this.notifications.remind(uid, body.friendId, body.amount, body.note, body.currency);
     return { ok: true };
   }
 }
