@@ -2,6 +2,7 @@
   "expo": {
     "name": "splitit",
     "slug": "splitit",
+    "owner": "ahmad_ch909",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/app-logo.png",
@@ -36,7 +37,8 @@
             "imageWidth": 200
           }
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

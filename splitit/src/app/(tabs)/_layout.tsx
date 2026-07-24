@@ -3,8 +3,10 @@ import { Tabs, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppHeader } from '@/components/app-header';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { usePushRegistration } from '@/helpers/use-push-registration';
 import { useTheme } from '@/hooks/use-theme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -87,8 +89,11 @@ function TabBar({ state, navigation }: TabBarProps) {
 
 export default function TabsLayout() {
   const theme = useTheme();
+  // Register for push + refresh the feed while the tabs are mounted.
+  usePushRegistration();
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.background }}>
+      <AppHeader />
       <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
         <Tabs.Screen name="index" options={{ title: 'Home' }} />
         <Tabs.Screen name="history" options={{ title: 'History' }} />

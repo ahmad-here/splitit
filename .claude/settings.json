@@ -18,6 +18,10 @@
           {
             "type": "command",
             "command": "node .claude/hooks/post-edit-check.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/solid-check.js"
           }
         ]
       }

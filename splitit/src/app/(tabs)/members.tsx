@@ -29,33 +29,41 @@ export default function MembersScreen() {
     <Screen scroll={!isEmpty}>
       <ThemedText type="subtitle">Members</ThemedText>
 
+      {/* Add a real member by their code (your own code lives in Settings) */}
       <View style={styles.addRow}>
         <View style={{ flex: 1 }}>
-          <TextField placeholder="Member name…" value={m.name} onChangeText={m.setName} onSubmitEditing={m.add} returnKeyType="done" />
+          <TextField
+            placeholder="Enter a friend's code…"
+            value={m.codeInput}
+            onChangeText={m.setCodeInput}
+            onSubmitEditing={m.addByCode}
+            autoCapitalize="characters"
+            returnKeyType="done"
+          />
         </View>
-        <Button title="Add" fullWidth={false} onPress={m.add} />
+        <Button title="Link" fullWidth={false} onPress={m.addByCode} loading={m.redeeming} />
+      </View>
+      
+
+      <View style={styles.searchRow}>
+        <SearchBar
+          value={m.query}
+          onChangeText={m.setQuery}
+          placeholder="Search members..."
+          onFilterPress={() => m.setSheetOpen(true)}
+          filterActive={m.filtersActive}
+        />
       </View>
 
+      <SectionHeader title={`Your people (${m.friends.length})`} />
+
       {isEmpty ? (
-        <EmptyState fill icon="people-outline" title="No members yet" message="Add people you split bills with to track balances." />
+        <EmptyState icon="people-outline" title="No members yet" message="Add a friend by their code above to start tracking balances." />
+      ) : noResults ? (
+        <EmptyState icon="search-outline" title="No members found." />
       ) : (
         <>
-          <View style={styles.searchRow}>
-            <SearchBar
-              value={m.query}
-              onChangeText={m.setQuery}
-              placeholder="Search members..."
-              onFilterPress={() => m.setSheetOpen(true)}
-              filterActive={m.filtersActive}
-            />
-          </View>
-
-          <SectionHeader title={`Your people (${m.friends.length})`} />
-
-          {noResults ? (
-            <EmptyState icon="search-outline" title="No members found." />
-          ) : (
-            <Card>
+          <Card>
               {m.visible.map((f) => {
                 const bal = m.balances.get(f.id) ?? 0;
                 const label = bal > 0 ? 'owes you' : bal < 0 ? 'you owe' : 'settled up';
@@ -79,6 +87,16 @@ export default function MembersScreen() {
                         >
                           <Ionicons name="add" size={18} color={theme.primary} />
                         </Pressable>
+                        {f.profileId && bal > 0 ? (
+                          <Pressable
+                            hitSlop={8}
+                            onPress={() => m.remind(f)}
+                            accessibilityLabel={`Remind ${f.name}`}
+                            style={[styles.settleBtn, { borderColor: theme.primary }]}
+                          >
+                            <Ionicons name="notifications-outline" size={16} color={theme.primary} />
+                          </Pressable>
+                        ) : null}
                         <Pressable hitSlop={8} onPress={() => m.confirmDelete(f)} accessibilityLabel={`Delete ${f.name}`}>
                           <Ionicons name="trash-outline" size={18} color={theme.muted} />
                         </Pressable>
@@ -87,8 +105,7 @@ export default function MembersScreen() {
                   />
                 );
               })}
-            </Card>
-          )}
+          </Card>
         </>
       )}
 

@@ -11,7 +11,9 @@ process.stdin.on('end', () => {
     const filePath = data?.tool_input?.file_path ?? '';
     const base = String(filePath).replace(/\\/g, '/').split('/').pop() ?? '';
     const isEnv = /^\.env(\..+)?$/.test(base) && base !== '.env.example';
-    if (isEnv) {
+    // Service-account / credential JSON files (Firebase, GCP) also hold secrets.
+    const isServiceAccount = /service-account.*\.json$/.test(base) || /firebase-adminsdk.*\.json$/.test(base);
+    if (isEnv || isServiceAccount) {
       console.error(
         `Blocked: "${base}" holds secrets and must not be edited by the agent. ` +
           `Edit it manually; use .env.example for shared templates.`,

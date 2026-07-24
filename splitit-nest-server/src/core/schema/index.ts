@@ -21,3 +21,11 @@ export * from './chat-member.schema';
 export * from './chat-request.schema';
 export * from './chat-split.schema';
 export * from './chat-reply.schema';
+
+// Multi-user / persistence (v2)
+export * from './member.schema';
+export * from './notification.schema';
+export * from './split-record.schema';
+export * from './payment.schema';
+export * from './chat-session.schema';
+export * from './memory.schema';

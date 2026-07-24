@@ -1,12 +1,18 @@
 /**
- * Splits (bill history) domain store.
+ * Splits (bill history) domain store — backed by the backend (/api/splits), not
+ * local storage. Held in memory and refreshed from the server; saving a split
+ * posts it (which also uploads the receipt and notifies linked participants).
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import {
+  deleteSplitRemote,
+  listSplitsRemote,
+  saveSplitRemote,
+} from '@/api/splits-client';
 import type { SplitRecord, SplitResult } from '@/db/models';
-import { splitsRepo } from '@/db/repositories';
-import { makeId } from '@/db/storage';
+import { useAuth } from '@/store/auth-store';
 
 export type SaveSplitMeta = {
   title: string;
@@ -16,49 +22,77 @@ export type SaveSplitMeta = {
   paidBy?: string;
   groupId?: string;
   id?: string;
+  /** Map of participant name -> linked friend profileId (for server notifications). */
+  participantLinks?: Record<string, string>;
 };
 
 type SplitsValue = {
   splits: SplitRecord[];
   saveSplit: (result: SplitResult, meta: SaveSplitMeta) => Promise<SplitRecord>;
   removeSplit: (id: string) => Promise<void>;
-  clearSplits: () => Promise<void>;
   getSplit: (id: string) => SplitRecord | undefined;
+  refresh: () => Promise<void>;
   reset: () => void;
 };
 
 const SplitsContext = createContext<SplitsValue | undefined>(undefined);
 
 export function SplitsProvider({ children }: { children: React.ReactNode }) {
+  const { user, emailVerified } = useAuth();
+  const active = !!user && emailVerified;
   const [splits, setSplits] = useState<SplitRecord[]>([]);
 
+  const refresh = useCallback(async () => {
+    if (!active) {
+      setSplits([]);
+      return;
+    }
+    try {
+      setSplits(await listSplitsRemote());
+    } catch {
+      // keep last-known on transient failure
+    }
+  }, [active]);
+
   useEffect(() => {
-    splitsRepo.list().then(setSplits);
-  }, []);
+    refresh();
+  }, [refresh]);
 
   const saveSplit = useCallback(async (result: SplitResult, meta: SaveSplitMeta) => {
+    const res = await saveSplitRemote({
+      ...result,
+      id: meta.id,
+      title: meta.title,
+      description: meta.description,
+      paidBy: meta.paidBy,
+      participantLinks: meta.participantLinks,
+      invoiceImage: meta.invoiceImageUri,
+    });
+
     const record: SplitRecord = {
       ...result,
-      id: meta.id ?? makeId('sp'),
+      id: res.id,
       title: meta.title,
       participants: meta.participants,
       description: meta.description,
-      invoiceImageUri: meta.invoiceImageUri,
+      invoiceImageUri: res.invoiceImageUrl ?? meta.invoiceImageUri,
       paidBy: meta.paidBy,
       groupId: meta.groupId,
       createdAt: new Date().toISOString(),
     };
-    setSplits(await splitsRepo.upsert(record));
+    // Optimistic insert (or replace when editing), then reconcile from server.
+    setSplits((prev) => [record, ...prev.filter((s) => s.id !== record.id)]);
+    refresh();
     return record;
-  }, []);
+  }, [refresh]);
 
   const removeSplit = useCallback(async (id: string) => {
-    setSplits(await splitsRepo.remove(id));
-  }, []);
-
-  const clearSplits = useCallback(async () => {
-    await splitsRepo.save([]);
-    setSplits([]);
+    setSplits((prev) => prev.filter((s) => s.id !== id));
+    try {
+      await deleteSplitRemote(id);
+    } catch {
+      // optimistic; a later refresh reconciles
+    }
   }, []);
 
   const reset = useCallback(() => setSplits([]), []);
@@ -66,8 +100,8 @@ export function SplitsProvider({ children }: { children: React.ReactNode }) {
   const getSplit = useCallback((id: string) => splits.find((s) => s.id === id), [splits]);
 
   const value = useMemo<SplitsValue>(
-    () => ({ splits, saveSplit, removeSplit, clearSplits, getSplit, reset }),
-    [splits, saveSplit, removeSplit, clearSplits, getSplit, reset],
+    () => ({ splits, saveSplit, removeSplit, getSplit, refresh, reset }),
+    [splits, saveSplit, removeSplit, getSplit, refresh, reset],
   );
 
   return <SplitsContext.Provider value={value}>{children}</SplitsContext.Provider>;

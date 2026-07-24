@@ -1,0 +1,80 @@
+rules_version = '2';
+
+// Splitit Firestore security rules.
+//
+// The Nest server uses the Admin SDK (service account), which BYPASSES these
+// rules — it performs all cross-user writes (friend links, notifications, split
+// fan-out). These rules govern only the app's direct client access, so they are
+// deliberately tight: a signed-in user may read/write their own data and read a
+// profile by friend code to add a friend.
+//
+// Deploy: firebase deploy --only firestore:rules  (or paste in the console).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // profiles/{uid}: readable to any signed-in user (needed to resolve a
+    // friend code to a person); writable only by the owner.
+    match /profiles/{uid} {
+      allow read: if signedIn();
+      allow write: if isSelf(uid);
+    }
+
+    // friendships/{uid}/friends/{friendUid}: owner-only reads. Writes happen
+    // server-side (Admin), so no client write.
+    match /friendships/{uid}/friends/{friendUid} {
+      allow read: if isSelf(uid);
+      allow write: if false;
+    }
+
+    // splits: readable by the owner or a linked participant; created by owner.
+    match /splits/{splitId} {
+      allow read: if signedIn() &&
+        (resource.data.ownerId == request.auth.uid ||
+         request.auth.uid in resource.data.participantIds);
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // payments: owner-only.
+    match /payments/{paymentId} {
+      allow read, write: if signedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+    }
+
+    // notifications: recipient may read and mark read; creation is server-side.
+    match /notifications/{notifId} {
+      allow read: if signedIn() && resource.data.recipientId == request.auth.uid;
+      allow update: if signedIn() && resource.data.recipientId == request.auth.uid;
+      allow create, delete: if false;
+    }
+
+    // pushTokens/{uid}: owner-only.
+    match /pushTokens/{uid} {
+      allow read, write: if isSelf(uid);
+    }
+
+    // chats/{chatId} + messages: owner-only.
+    match /chats/{chatId} {
+      allow read, write: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      match /messages/{messageId} {
+        allow read, write: if signedIn() &&
+          get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+      }
+    }
+
+    // userMemory/{uid}: owner reads; server writes.
+    match /userMemory/{uid} {
+      allow read: if isSelf(uid);
+      allow write: if false;
+    }
+  }
+}

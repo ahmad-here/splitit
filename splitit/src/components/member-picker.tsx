@@ -11,7 +11,6 @@ import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFriends } from '@/store/friends-store';
-import { toast } from '@/utils/toast';
 
 export type MemberRef = { id: string; name: string };
 
@@ -25,7 +24,7 @@ type Props = {
 export function MemberPicker({ visible, onClose, selected, onChange }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { friends, addFriend } = useFriends();
+  const { friends } = useFriends();
   const [query, setQuery] = useState('');
 
   const selectedIds = useMemo(() => new Set(selected.map((m) => m.id)), [selected]);
@@ -35,20 +34,9 @@ export function MemberPicker({ visible, onClose, selected, onChange }: Props) {
     return q ? friends.filter((f) => f.name.toLowerCase().includes(q)) : friends;
   }, [friends, query]);
 
-  const exactExists = friends.some((f) => f.name.toLowerCase() === query.trim().toLowerCase());
-
   function toggle(member: MemberRef) {
     if (selectedIds.has(member.id)) onChange(selected.filter((m) => m.id !== member.id));
     else onChange([...selected, member]);
-  }
-
-  async function createAndAdd() {
-    const name = query.trim();
-    if (!name) return;
-    const friend = await addFriend(name);
-    onChange([...selected, { id: friend.id, name: friend.name }]);
-    toast.success('Member added', name);
-    setQuery('');
   }
 
   return (
@@ -62,11 +50,13 @@ export function MemberPicker({ visible, onClose, selected, onChange }: Props) {
             </Pressable>
           </View>
 
-          <TextField placeholder="Search or type a new name…" value={query} onChangeText={setQuery} autoFocus autoCorrect={false} />
+          <TextField placeholder="Search your members…" value={query} onChangeText={setQuery} autoFocus autoCorrect={false} />
 
           <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
-            {filtered.map((f) => {
+            {friends.map((f) => {
               const on = selectedIds.has(f.id);
+              const hidden = query.trim() && !f.name.toLowerCase().includes(query.trim().toLowerCase());
+              if (hidden) return null;
               return (
                 <Pressable key={f.id} onPress={() => toggle({ id: f.id, name: f.name })} style={styles.row}>
                   <Avatar name={f.name} size={36} />
@@ -82,20 +72,17 @@ export function MemberPicker({ visible, onClose, selected, onChange }: Props) {
               );
             })}
 
-            {query.trim().length > 0 && !exactExists ? (
-              <Pressable onPress={createAndAdd} style={styles.row}>
-                <View style={[styles.addIcon, { backgroundColor: theme.primary }]}>
-                  <Ionicons name="add" size={22} color={theme.onPrimary} />
-                </View>
-                <ThemedText type="smallBold" style={styles.rowName}>
-                  Add “{query.trim()}” as a new member
-                </ThemedText>
-              </Pressable>
-            ) : null}
-
-            {filtered.length === 0 && query.trim().length === 0 ? (
+            {friends.length === 0 ? (
               <View style={styles.empty}>
-                <EmptyState icon="people-outline" title="No members yet" message="Type a name above to add your first member." />
+                <EmptyState
+                  icon="people-outline"
+                  title="No members yet"
+                  message="Add friends by their unique code in the Members tab, then pick them here."
+                />
+              </View>
+            ) : filtered.length === 0 ? (
+              <View style={styles.empty}>
+                <EmptyState icon="search-outline" title="No members found." />
               </View>
             ) : null}
           </ScrollView>

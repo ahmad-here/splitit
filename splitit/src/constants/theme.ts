@@ -67,6 +67,18 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
+/**
+ * Poppins family (loaded in the root layout via @expo-google-fonts/poppins).
+ * Custom fonts don't map fontWeight → variant automatically, so components pick
+ * the explicit family for the weight they want.
+ */
+export const Poppins = {
+  regular: 'Poppins_400Regular',
+  medium: 'Poppins_500Medium',
+  semibold: 'Poppins_600SemiBold',
+  bold: 'Poppins_700Bold',
+} as const;
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

@@ -7,5 +7,7 @@ import { ChatMessageSchema } from './chat-message.schema';
 export const ChatRequestSchema = z.object({
   messages: z.array(ChatMessageSchema),
   members: z.array(ChatMemberSchema).default([]),
+  /** When signed in, the chat session to persist into (omit to start a new one). */
+  chatId: z.string().optional(),
 });
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;

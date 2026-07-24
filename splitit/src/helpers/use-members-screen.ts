@@ -4,11 +4,14 @@
  * only renders.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 
+import { getMyProfile, redeemCode } from '@/api/members-client';
+import { remindMember } from '@/api/notifications-client';
 import { balanceForFriend } from '@/db/balances';
 import type { Friend } from '@/db/models';
+import { useAuth } from '@/store/auth-store';
 import {
   DEFAULT_FILTER,
   DEFAULT_SORT,
@@ -22,11 +25,14 @@ import { useSplits } from '@/store/splits-store';
 import { toast } from '@/utils/toast';
 
 export function useMembersScreen() {
-  const { friends, addFriend, removeFriend } = useFriends();
+  const { friends, refresh: refreshFriends, removeFriend } = useFriends();
   const { splits } = useSplits();
   const { payments, addPayment } = usePayments();
+  const { user, emailVerified } = useAuth();
 
-  const [name, setName] = useState('');
+  const [myCode, setMyCode] = useState<string | null>(null);
+  const [codeInput, setCodeInput] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortValue>(DEFAULT_SORT);
   const [filter, setFilter] = useState<FilterValue>(DEFAULT_FILTER);
@@ -46,17 +52,52 @@ export function useMembersScreen() {
     [friends, balances, query, filter, sort],
   );
 
-  async function add() {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    if (friends.some((f) => f.name.toLowerCase() === trimmed.toLowerCase())) {
-      toast.info('Already added', `${trimmed} is already a member.`);
-      setName('');
+  // Load my shareable friend code once signed in.
+  useEffect(() => {
+    if (!user || !emailVerified) return;
+    let active = true;
+    getMyProfile()
+      .then((p) => active && setMyCode(p.friendCode))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [user, emailVerified]);
+
+  /** Add a friend by their code — links two real users and saves locally. */
+  async function addByCode() {
+    const code = codeInput.trim().toUpperCase();
+    if (!code) return;
+    setRedeeming(true);
+    try {
+      const member = await redeemCode(code);
+      const already = friends.some((f) => f.profileId === member.profileId);
+      await refreshFriends();
+      toast[already ? 'info' : 'success'](
+        already ? 'Already added' : 'Member added',
+        member.name,
+      );
+      setCodeInput('');
+    } catch (err) {
+      toast.error('Could not add member', err instanceof Error ? err.message : undefined);
+    } finally {
+      setRedeeming(false);
+    }
+  }
+
+  /** Reminder button: nudge a linked friend about the money they owe you. */
+  async function remind(friend: Friend) {
+    if (!friend.profileId) {
+      toast.info('Not a linked member', 'Add them by their code to send reminders.');
       return;
     }
-    await addFriend(trimmed);
-    toast.success('Member added', trimmed);
-    setName('');
+    const owed = balances.get(friend.id) ?? 0;
+    try {
+      await remindMember(friend.profileId, owed > 0 ? owed : undefined);
+      toast.success('Reminder sent', friend.name);
+    } catch (err) {
+      toast.error('Could not send reminder', err instanceof Error ? err.message : undefined);
+    }
   }
 
   function confirmDelete(friend: Friend) {
@@ -111,10 +152,13 @@ export function useMembersScreen() {
     friends,
     visible,
     balances,
-    // add
-    name,
-    setName,
-    add,
+    // friend code linking
+    myCode,
+    codeInput,
+    setCodeInput,
+    addByCode,
+    redeeming,
+    remind,
     // search / sort / filter
     query,
     setQuery,

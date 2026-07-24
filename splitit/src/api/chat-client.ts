@@ -22,8 +22,18 @@ export type ChatResponse = {
   reply: string;
   result: SplitResult | null;
   title: string | null;
+  /** The persisted chat session id (null when signed out / stateless). */
+  chatId: string | null;
 };
 
-export async function postChat(messages: ChatWireMessage[], members: ChatMemberRef[]): Promise<ChatResponse> {
-  return httpClient.postJson<ChatResponse>('/api/chat', { messages, members });
+/**
+ * Send a chat turn. When signed in, pass `chatId` to persist into an existing
+ * session (omit to start a new one); the server returns the session id.
+ */
+export async function postChat(
+  messages: ChatWireMessage[],
+  members: ChatMemberRef[],
+  chatId?: string,
+): Promise<ChatResponse> {
+  return httpClient.postJson<ChatResponse>('/api/chat', { messages, members, chatId });
 }

@@ -11,6 +11,10 @@ export type Friend = {
   name: string;
   /** Optional short color seed / emoji for the avatar. */
   colorSeed?: string;
+  /** Set when this friend is a real linked Splitit user (added by code). */
+  profileId?: ID;
+  /** The friend's shareable code (when linked). */
+  friendCode?: string;
   createdAt: string;
 };
 

@@ -1,29 +1,34 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useEffect, useRef } from 'react';
+import { Stack } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ChatHistoryDrawer } from '@/components/chat/chat-history-drawer';
 import { ResultCard } from '@/components/chat/result-card';
 import { MemberPicker } from '@/components/member-picker';
 import { ThemedText } from '@/components/themed-text';
-import { Chip } from '@/components/ui/chip';
+import { OptionSheet } from '@/components/ui/option-sheet';
 import { Spacing } from '@/constants/theme';
 import { useChat } from '@/helpers/use-chat';
-import { useKeyboardHeight } from '@/hooks/use-keyboard-height';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function ChatScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const keyboardHeight = useKeyboardHeight();
   const scrollRef = useRef<ScrollView>(null);
   const c = useChat();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [paidByOpen, setPaidByOpen] = useState(false);
+  const keyboardVisible = useKeyboardState().isVisible;
 
   // Keep the latest message visible when the keyboard opens.
   useEffect(() => {
-    if (keyboardHeight > 0) scrollRef.current?.scrollToEnd({ animated: true });
-  }, [keyboardHeight]);
+    if (keyboardVisible) scrollRef.current?.scrollToEnd({ animated: true });
+  }, [keyboardVisible]);
 
   const {
     messages,
@@ -40,32 +45,48 @@ export default function ChatScreen() {
   const isEmpty = messages.length === 0;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background, paddingBottom: keyboardHeight }}>
-      {/* Members bar */}
-      <View style={[styles.membersBar, { borderBottomColor: theme.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.membersRow}>
-          {members.map((m) => (
-            <Chip key={m.id} label={`${m.name}  ✕`} selected onPress={() => c.removeMember(m.id)} />
-          ))}
-          <Pressable onPress={() => c.setPickerVisible(true)} style={[styles.addMember, { borderColor: theme.primary }]}>
-            <Ionicons name="person-add-outline" size={16} color={theme.primary} />
-            <ThemedText type="small" style={{ color: theme.primary }}>
-              Add member
-            </ThemedText>
-          </Pressable>
-        </ScrollView>
-      </View>
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: theme.background }}>
+      {/* Header button (right) to open the chat history menu. */}
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable
+              hitSlop={10}
+              onPress={() => setDrawerOpen(true)}
+              accessibilityLabel="Chat history"
+              style={{ paddingLeft: Spacing.three, paddingRight: Spacing.four }}
+            >
+              <Ionicons name="time-outline" size={22} color={theme.text} />
+            </Pressable>
+          ),
+        }}
+      />
 
-      {/* Paid by selector */}
-      <View style={[styles.paidBar, { borderBottomColor: theme.border }]}>
-        <ThemedText type="small" themeColor="textSecondary">
-          Paid by
-        </ThemedText>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.paidRow}>
-          {payerOptions.map((name) => (
-            <Chip key={name} label={name} selected={paidBy === name} onPress={() => c.setPaidBy(name)} />
-          ))}
-        </ScrollView>
+      {/* Members + payer — compact dropdowns (avoid chip clutter with many members) */}
+      <View style={[styles.controlsBar, { borderBottomColor: theme.border }]}>
+        <Pressable
+          onPress={() => c.setPickerVisible(true)}
+          style={[styles.dropdown, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}
+        >
+          <Ionicons name="people-outline" size={16} color={theme.primary} />
+          <ThemedText type="small" numberOfLines={1} style={styles.dropdownLabel}>
+            {members.length === 0 ? 'Add members' : `${members.length}: ${members.map((m) => m.name).join(', ')}`}
+          </ThemedText>
+          <Ionicons name="chevron-down" size={16} color={theme.muted} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => setPaidByOpen(true)}
+          style={[styles.dropdown, styles.paidDropdown, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}
+        >
+          <ThemedText type="small" themeColor="textSecondary">
+            Paid by
+          </ThemedText>
+          <ThemedText type="small" numberOfLines={1} style={styles.dropdownLabel}>
+            {paidBy}
+          </ThemedText>
+          <Ionicons name="chevron-down" size={16} color={theme.muted} />
+        </Pressable>
       </View>
 
       {/* Conversation */}
@@ -97,7 +118,11 @@ export default function ChatScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {messages.map((m) => (
-            <View key={m.id} style={[styles.bubbleRow, m.role === 'user' ? styles.rowRight : styles.rowLeft]}>
+            <Animated.View
+              key={m.id}
+              entering={FadeInDown.springify().damping(18).mass(0.6)}
+              style={[styles.bubbleRow, m.role === 'user' ? styles.rowRight : styles.rowLeft]}
+            >
               <View
                 style={[
                   styles.bubble,
@@ -126,16 +151,16 @@ export default function ChatScreen() {
                   />
                 </View>
               ) : null}
-            </View>
+            </Animated.View>
           ))}
           {sending ? (
-            <View style={[styles.bubbleRow, styles.rowLeft]}>
+            <Animated.View entering={FadeIn.duration(200)} style={[styles.bubbleRow, styles.rowLeft]}>
               <View style={[styles.bubble, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: StyleSheet.hairlineWidth }]}>
                 <ThemedText type="small" themeColor="textSecondary">
                   Splitit is thinking…
                 </ThemedText>
               </View>
-            </View>
+            </Animated.View>
           ) : null}
         </ScrollView>
       )}
@@ -174,9 +199,9 @@ export default function ChatScreen() {
           styles.inputBar,
           {
             borderTopColor: theme.border,
-            // The container already lifts by keyboardHeight; only add the
+            // KeyboardAvoidingView lifts the bar above the keyboard; only add the
             // home-indicator inset when the keyboard is closed.
-            paddingBottom: keyboardHeight > 0 ? Spacing.two : insets.bottom + Spacing.two,
+            paddingBottom: keyboardVisible ? Spacing.two : insets.bottom + Spacing.two,
           },
         ]}
       >
@@ -208,16 +233,53 @@ export default function ChatScreen() {
       </View>
 
       <MemberPicker visible={pickerVisible} onClose={() => c.setPickerVisible(false)} selected={members} onChange={c.setMembers} />
-    </View>
+
+      <OptionSheet
+        visible={paidByOpen}
+        onClose={() => setPaidByOpen(false)}
+        title="Paid by"
+        groups={[
+          {
+            title: 'Who paid?',
+            options: payerOptions.map((name) => ({ label: name, value: name })),
+            value: paidBy,
+            onSelect: (v) => {
+              c.setPaidBy(v);
+              setPaidByOpen(false);
+            },
+          },
+        ]}
+      />
+
+      <ChatHistoryDrawer
+        visible={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onNewChat={c.newChat}
+        onSelect={c.openChat}
+      />
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  membersBar: { borderBottomWidth: StyleSheet.hairlineWidth },
-  membersRow: { flexDirection: 'row', gap: Spacing.two, alignItems: 'center', padding: Spacing.two },
-  addMember: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
-  paidBar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderBottomWidth: StyleSheet.hairlineWidth },
-  paidRow: { flexDirection: 'row', gap: Spacing.two, alignItems: 'center' },
+  controlsBar: {
+    flexDirection: 'column',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  paidDropdown: {},
+  dropdownLabel: { flex: 1 },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four, gap: Spacing.two },
   emptyTitle: { textAlign: 'center' },

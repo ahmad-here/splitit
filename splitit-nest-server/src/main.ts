@@ -7,8 +7,15 @@ import { ErrorShapeFilter } from './common/http-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // The Expo app runs on a different origin in dev.
-  app.enableCors({ origin: '*', methods: 'GET,POST,OPTIONS', allowedHeaders: 'Content-Type' });
+  // The Expo app runs on a different origin (web/dev). Must allow the
+  // Authorization header or browsers block every authenticated request with
+  // "Failed to fetch". ngrok-skip-browser-warning lets browser fetches bypass
+  // ngrok's interstitial page.
+  app.enableCors({
+    origin: '*',
+    methods: 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type,Authorization,ngrok-skip-browser-warning',
+  });
 
   // Keeps the existing /api/split, /api/chat, /api/health paths.
   app.setGlobalPrefix('api');

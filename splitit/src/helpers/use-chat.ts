@@ -5,14 +5,16 @@
  */
 
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 
 import { postChat, type ChatWireMessage } from '@/api/chat-client';
+import { getChatMessages } from '@/api/chats-client';
 import type { MemberRef } from '@/components/member-picker';
 import { OWNER_NAME } from '@/db/balances';
 import type { SplitResult } from '@/db/models';
 import { useFlow } from '@/store/flow-context';
+import { useFriends } from '@/store/friends-store';
 import { useSplits } from '@/store/splits-store';
 import { shareSplit } from '@/utils/share';
 import { toast } from '@/utils/toast';
@@ -37,7 +39,9 @@ function defaultTitle(): string {
 export function useChat() {
   const router = useRouter();
   const { saveSplit } = useSplits();
+  const { friends } = useFriends();
   const { setDraft } = useFlow();
+  const params = useLocalSearchParams<{ chatId?: string }>();
 
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [members, setMembers] = useState<MemberRef[]>([]);
@@ -47,6 +51,36 @@ export function useChat() {
   const [sending, setSending] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  // The persisted chat session id (set after the first authed turn, or when
+  // opening a past chat via the ?chatId route param).
+  const [chatId, setChatId] = useState<string | null>(params.chatId ?? null);
+
+  // Restore a past chat's messages when opened from the chat list.
+  useEffect(() => {
+    if (!params.chatId) return;
+    let active = true;
+    getChatMessages(params.chatId)
+      .then((stored) => {
+        if (!active) return;
+        setMessages(
+          stored.map((m) => ({ id: m.id, role: m.role, text: m.text, image: m.imageUrl })),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [params.chatId]);
+
+  /** Map participant names to linked friend profileIds for server notifications. */
+  function participantLinks(names: string[]): Record<string, string> {
+    const links: Record<string, string> = {};
+    for (const name of names) {
+      const friend = friends.find((f) => f.name.toLowerCase() === name.toLowerCase() && f.profileId);
+      if (friend?.profileId) links[name] = friend.profileId;
+    }
+    return links;
+  }
 
   const payerOptions = [OWNER_NAME, ...members.map((m) => m.name)];
 
@@ -85,7 +119,9 @@ export function useChat() {
       const res = await postChat(
         chain,
         members.map((m) => ({ id: m.id, name: m.name })),
+        chatId ?? undefined,
       );
+      if (res.chatId) setChatId(res.chatId);
       setMessages((prev) => [
         ...prev,
         { id: nextId(), role: 'assistant', text: res.reply, result: res.result ?? undefined, title: res.title ?? undefined },
@@ -109,13 +145,20 @@ export function useChat() {
 
   async function onSave(msg: UIMessage) {
     if (!msg.result) return;
+    const title = msg.title ?? defaultTitle();
+    const participants = msg.result.perPerson.map((p) => p.name);
+
+    // saveSplit persists locally AND syncs to the backend (notifications +
+    // receipt upload) in one place — see splits-store.
     await saveSplit(msg.result, {
-      title: msg.title ?? defaultTitle(),
-      participants: msg.result.perPerson.map((p) => p.name),
+      title,
+      participants,
       paidBy,
       description: conversationDescription(),
       invoiceImageUri: conversationImage(),
+      participantLinks: participantLinks(participants),
     });
+
     setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, saved: true } : m)));
     toast.success('Split saved');
   }
@@ -135,6 +178,27 @@ export function useChat() {
 
   function removeMember(id: string) {
     setMembers((prev) => prev.filter((x) => x.id !== id));
+  }
+
+  /** Start a fresh chat (clear the conversation + session). */
+  function newChat() {
+    setChatId(null);
+    setMessages([]);
+    setInput('');
+    setStaged(null);
+  }
+
+  /** Open a past chat by id and restore its messages. */
+  async function openChat(id: string) {
+    setChatId(id);
+    setInput('');
+    setStaged(null);
+    try {
+      const stored = await getChatMessages(id);
+      setMessages(stored.map((m) => ({ id: m.id, role: m.role, text: m.text, image: m.imageUrl })));
+    } catch {
+      setMessages([]);
+    }
   }
 
   function shareResult(msg: UIMessage) {
@@ -164,5 +228,7 @@ export function useChat() {
     onSave,
     onEdit,
     shareResult,
+    newChat,
+    openChat,
   };
 }

@@ -1,39 +1,48 @@
 /**
- * Payments (repayments / settle-ups) domain store.
+ * Payments (settle-ups) domain store — backed by the backend (/api/payments),
+ * not local storage. Held in memory and refreshed from the server.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { createPaymentRemote, listPaymentsRemote } from '@/api/payments-client';
 import type { Payment, PaymentDirection } from '@/db/models';
-import { paymentsRepo } from '@/db/repositories';
-import { makeId } from '@/db/storage';
+import { useAuth } from '@/store/auth-store';
 
 type PaymentsValue = {
   payments: Payment[];
   addPayment: (friendId: string, amount: number, direction: PaymentDirection, note?: string) => Promise<Payment>;
+  refresh: () => Promise<void>;
   reset: () => void;
 };
 
 const PaymentsContext = createContext<PaymentsValue | undefined>(undefined);
 
 export function PaymentsProvider({ children }: { children: React.ReactNode }) {
+  const { user, emailVerified } = useAuth();
+  const active = !!user && emailVerified;
   const [payments, setPayments] = useState<Payment[]>([]);
 
+  const refresh = useCallback(async () => {
+    if (!active) {
+      setPayments([]);
+      return;
+    }
+    try {
+      setPayments(await listPaymentsRemote());
+    } catch {
+      // keep last-known on transient failure
+    }
+  }, [active]);
+
   useEffect(() => {
-    paymentsRepo.list().then(setPayments);
-  }, []);
+    refresh();
+  }, [refresh]);
 
   const addPayment = useCallback(
     async (friendId: string, amount: number, direction: PaymentDirection, note?: string) => {
-      const payment: Payment = {
-        id: makeId('pm'),
-        friendId,
-        amount,
-        direction,
-        note,
-        createdAt: new Date().toISOString(),
-      };
-      setPayments(await paymentsRepo.upsert(payment));
+      const payment = await createPaymentRemote({ friendId, amount, direction, note });
+      setPayments((prev) => [payment, ...prev]);
       return payment;
     },
     [],
@@ -41,7 +50,10 @@ export function PaymentsProvider({ children }: { children: React.ReactNode }) {
 
   const reset = useCallback(() => setPayments([]), []);
 
-  const value = useMemo<PaymentsValue>(() => ({ payments, addPayment, reset }), [payments, addPayment, reset]);
+  const value = useMemo<PaymentsValue>(
+    () => ({ payments, addPayment, refresh, reset }),
+    [payments, addPayment, refresh, reset],
+  );
 
   return <PaymentsContext.Provider value={value}>{children}</PaymentsContext.Provider>;
 }

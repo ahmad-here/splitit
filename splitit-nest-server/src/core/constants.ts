@@ -37,3 +37,12 @@ export const ASSIGN_ITEMS_PROMPT =
   '(2) "people" must be a non-empty subset of the participant list. ' +
   '(3) If an item is not clearly attributed to anyone, split it among ALL participants. ' +
   '(4) Every item must appear exactly once.';
+
+/** Cross-chat memory extraction prompt (src/core/chat/agent.ts → extractMemory). */
+export const MEMORY_EXTRACTION_PROMPT =
+  'You maintain a small long-term memory about the user across all their chats, like ChatGPT. ' +
+  'Given the EXISTING FACTS and the latest conversation, return the FULL updated list of durable facts. ' +
+  'Keep only stable, reusable facts: the user\'s name, preferred currency, recurring people/relationships, ' +
+  'and lasting preferences. NEVER store transient details of a specific bill (amounts, one-off items). ' +
+  'Merge duplicates, keep each fact short, and cap the list at 20 facts. If nothing is worth remembering, ' +
+  'return the existing facts unchanged.';

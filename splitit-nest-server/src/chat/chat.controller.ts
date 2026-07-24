@@ -1,26 +1,33 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Req } from '@nestjs/common';
+import type { Request } from 'express';
 
-import { ChatService } from './chat.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { ChatRequestSchema } from '../core/schema';
-import type { ChatResponse } from '../core/chat/agent';
-import type { z } from 'zod';
-
-type ChatRequest = z.infer<typeof ChatRequestSchema>;
+import { ChatRequestSchema, type ChatRequest } from '../core/schema';
+import { FirebaseService } from '../firebase/firebase.service';
+import { ChatService, type ChatResult } from './chat.service';
 
 /**
  * POST /api/chat — conversational bill splitting.
- * Body: { messages: ChatMessage[], members: ChatMember[] }
- * Returns: { reply, result, title }
+ * Optional auth: a valid `Authorization: Bearer <firebase-id-token>` unlocks
+ * cross-chat memory and persistence; without it the endpoint stays stateless
+ * (backward-compatible with the pre-accounts app).
  */
 @Controller('chat')
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly firebase: FirebaseService,
+  ) {}
 
   @Post()
   async chat(
+    @Req() req: Request,
     @Body(new ZodValidationPipe(ChatRequestSchema)) body: ChatRequest,
-  ): Promise<ChatResponse> {
-    return this.chatService.chat(body.messages, body.members);
+  ): Promise<ChatResult> {
+    const header = req.headers.authorization ?? '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const uid = token ? ((await this.firebase.getUserId(token)) ?? undefined) : undefined;
+
+    return this.chatService.chat(body.messages, body.members, { uid, chatId: body.chatId });
   }
 }

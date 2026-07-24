@@ -10,7 +10,7 @@ import { useSplits } from '@/store/splits-store';
 import { toast } from '@/utils/toast';
 
 export function useHistory() {
-  const { splits, removeSplit, clearSplits } = useSplits();
+  const { splits, removeSplit } = useSplits();
 
   function confirmDelete(split: SplitRecord) {
     Alert.alert('Delete split', `Delete “${split.title}”? This can’t be undone.`, [
@@ -33,7 +33,7 @@ export function useHistory() {
         text: 'Clear all',
         style: 'destructive',
         onPress: async () => {
-          await clearSplits();
+          await Promise.all(splits.map((s) => removeSplit(s.id)));
           toast.success('History cleared');
         },
       },

@@ -1,13 +1,23 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import {
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  useFonts,
+} from '@expo-google-fonts/poppins';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
 import { Colors } from '@/constants/theme';
+import { isFirebaseConfigured } from '@/config/env';
 import { AppStoreProvider } from '@/store/app-store';
+import { AuthProvider, useAuth } from '@/store/auth-store';
 import { FlowProvider } from '@/store/flow-context';
 import { ThemeModeProvider, useResolvedScheme } from '@/store/theme-context';
 
@@ -22,9 +32,41 @@ setTimeout(() => {
 /** Surfaces render errors instead of hanging on the splash screen. */
 export { ErrorBoundary } from 'expo-router';
 
+/**
+ * Redirects between the (auth) group and the app based on the session:
+ *   - not signed in           → /(auth)/sign-in
+ *   - signed in, unverified   → /(auth)/verify-email
+ *   - signed in + verified    → /(tabs)
+ * If Firebase isn't configured yet, auth is skipped so the app still runs.
+ */
+function useAuthGate() {
+  const { user, initializing, emailVerified } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isFirebaseConfigured || initializing) return;
+    // Route strings are validated by expo-router typegen at dev start; the
+    // (auth) group isn't in the generated union until then, hence the casts.
+    const seg = segments as string[];
+    const inAuthGroup = seg[0] === '(auth)';
+
+    if (!user) {
+      if (!inAuthGroup) router.replace('/(auth)/sign-in' as never);
+      return;
+    }
+    if (!emailVerified) {
+      if (seg[1] !== 'verify-email') router.replace('/(auth)/verify-email' as never);
+      return;
+    }
+    if (inAuthGroup) router.replace('/(tabs)');
+  }, [user, initializing, emailVerified, segments, router]);
+}
+
 function Navigation() {
   const scheme = useResolvedScheme();
   const colors = Colors[scheme];
+  useAuthGate();
 
   const navTheme = {
     ...(scheme === 'dark' ? DarkTheme : DefaultTheme),
@@ -45,8 +87,13 @@ function Navigation() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: colors.background },
+          // Theme-aware header so the back button stays visible in dark mode.
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
+          headerTitleStyle: { color: colors.text },
         }}
       >
+        <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="upload" options={{ headerShown: true, title: 'New split', presentation: 'card' }} />
         <Stack.Screen name="result" options={{ headerShown: true, title: 'AI Result' }} />
@@ -58,22 +105,36 @@ function Navigation() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
+
   useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
+    if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded]);
+
+  // Hold on the splash until Poppins is ready to avoid a font swap flash.
+  if (!fontsLoaded) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ThemeModeProvider>
-          <AppStoreProvider>
-            <FlowProvider>
-              <Navigation />
-              <Toast />
-            </FlowProvider>
-          </AppStoreProvider>
-        </ThemeModeProvider>
-      </SafeAreaProvider>
+      <KeyboardProvider>
+        <SafeAreaProvider>
+          <ThemeModeProvider>
+            <AuthProvider>
+              <AppStoreProvider>
+                <FlowProvider>
+                  <Navigation />
+                  <Toast />
+                </FlowProvider>
+              </AppStoreProvider>
+            </AuthProvider>
+          </ThemeModeProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }
