@@ -30,13 +30,20 @@ export function NotificationsDrawer({ visible, onClose }: Props) {
   }, [visible, refresh]);
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      navigationBarTranslucent
+    >
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} />
         <Animated.View
           entering={SlideInRight.duration(220)}
           exiting={SlideOutRight.duration(180)}
-          style={[styles.panel, { backgroundColor: '#000', paddingTop: insets.top + Spacing.two }]}
+          style={[styles.panel, { backgroundColor: theme.background, paddingTop: insets.top + Spacing.two }]}
         >
           <View style={styles.header}>
             <ThemedText type="smallBold">Notifications</ThemedText>

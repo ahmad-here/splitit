@@ -16,6 +16,7 @@ import { useRealtimeRefresh } from '@/helpers/use-realtime';
 
 type FriendsValue = {
   friends: Friend[];
+  hydrated: boolean;
   refresh: () => Promise<void>;
   removeFriend: (profileId: string) => Promise<void>;
   reset: () => void;
@@ -28,10 +29,12 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
   const active = !!user && emailVerified;
   const uid = user?.uid ?? null;
   const [friends, setFriends] = useState<Friend[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!active) {
       setFriends([]);
+      setHydrated(true);
       return;
     }
     try {
@@ -47,6 +50,8 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       );
     } catch {
       // keep the last-known list on transient failure
+    } finally {
+      setHydrated(true);
     }
   }, [active]);
 
@@ -73,8 +78,8 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
   const reset = useCallback(() => setFriends([]), []);
 
   const value = useMemo<FriendsValue>(
-    () => ({ friends, refresh, removeFriend, reset }),
-    [friends, refresh, removeFriend, reset],
+    () => ({ friends, hydrated, refresh, removeFriend, reset }),
+    [friends, hydrated, refresh, removeFriend, reset],
   );
 
   return <FriendsContext.Provider value={value}>{children}</FriendsContext.Provider>;

@@ -19,6 +19,10 @@ import { isFirebaseConfigured } from '@/config/env';
 import { AppStoreProvider } from '@/store/app-store';
 import { AuthProvider, useAuth } from '@/store/auth-store';
 import { FlowProvider } from '@/store/flow-context';
+import { useFriends } from '@/store/friends-store';
+import { useNotifications } from '@/store/notifications-store';
+import { usePayments } from '@/store/payments-store';
+import { useSplits } from '@/store/splits-store';
 import { ThemeModeProvider, useResolvedScheme } from '@/store/theme-context';
 
 SplashScreen.preventAutoHideAsync();
@@ -63,10 +67,34 @@ function useAuthGate() {
   }, [user, initializing, emailVerified, segments, router]);
 }
 
+/**
+ * Keeps the native splash visible until the first data load finishes, so the app
+ * reveals already-populated (no flash of zeros). Signed-out users see the splash
+ * hide immediately; a 4s safety net (in RootLayout) covers a hung network.
+ */
+function useSplashGate() {
+  const { initializing, user, emailVerified } = useAuth();
+  // Call every store hook unconditionally (no && short-circuit) so hook order is
+  // stable across renders, then combine the flags.
+  const friends = useFriends();
+  const splits = useSplits();
+  const payments = usePayments();
+  const notifications = useNotifications();
+  const dataReady = friends.hydrated && splits.hydrated && payments.hydrated && notifications.hydrated;
+
+  useEffect(() => {
+    const signedIn = !!user && emailVerified;
+    if (!initializing && (!signedIn || dataReady)) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [initializing, user, emailVerified, dataReady]);
+}
+
 function Navigation() {
   const scheme = useResolvedScheme();
   const colors = Colors[scheme];
   useAuthGate();
+  useSplashGate();
 
   const navTheme = {
     ...(scheme === 'dark' ? DarkTheme : DefaultTheme),
@@ -112,11 +140,9 @@ export default function RootLayout() {
     Poppins_700Bold,
   });
 
-  useEffect(() => {
-    if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
-  }, [fontsLoaded]);
-
   // Hold on the splash until Poppins is ready to avoid a font swap flash.
+  // The splash is hidden later by useSplashGate() once the first data load
+  // finishes, so the app reveals already-populated (no flash of zeros).
   if (!fontsLoaded) return null;
 
   return (

@@ -21,6 +21,7 @@ type NotificationsValue = {
   notifications: AppNotification[];
   unreadCount: number;
   loading: boolean;
+  hydrated: boolean;
   refresh: () => Promise<void>;
   markRead: (id: string) => Promise<void>;
   clearAll: () => Promise<void>;
@@ -32,6 +33,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const { user, emailVerified } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
   const active = !!user && emailVerified;
   const uid = user?.uid ?? null;
@@ -39,6 +41,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const refresh = useCallback(async () => {
     if (!active) {
       setNotifications([]);
+      setHydrated(true);
       return;
     }
     setLoading(true);
@@ -48,6 +51,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       // leave the last-known feed on transient failure
     } finally {
       setLoading(false);
+      setHydrated(true);
     }
   }, [active]);
 
@@ -84,8 +88,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
   const value = useMemo<NotificationsValue>(
-    () => ({ notifications, unreadCount, loading, refresh, markRead, clearAll }),
-    [notifications, unreadCount, loading, refresh, markRead, clearAll],
+    () => ({ notifications, unreadCount, loading, hydrated, refresh, markRead, clearAll }),
+    [notifications, unreadCount, loading, hydrated, refresh, markRead, clearAll],
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;

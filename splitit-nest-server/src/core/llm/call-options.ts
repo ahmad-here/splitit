@@ -8,8 +8,19 @@
  */
 const DEFAULT_TIMEOUT_MS = 45_000;
 
-export function llmCallOptions(): { timeout: number } {
+/** The configured per-request timeout in ms (LLM_TIMEOUT_MS, default 45s). */
+export function llmTimeoutMs(): number {
   const raw = process.env.LLM_TIMEOUT_MS;
   const parsed = raw ? Number(raw) : NaN;
-  return { timeout: Number.isFinite(parsed) ? parsed : DEFAULT_TIMEOUT_MS };
+  return Number.isFinite(parsed) ? parsed : DEFAULT_TIMEOUT_MS;
+}
+
+/** Model-level call options (used by direct model.invoke / withStructuredOutput). */
+export function llmCallOptions(): { timeout: number } {
+  return { timeout: llmTimeoutMs() };
+}
+
+/** Agent (LangGraph) invoke config — enforces the timeout via an abort signal. */
+export function agentInvokeConfig(): { signal: AbortSignal } {
+  return { signal: AbortSignal.timeout(llmTimeoutMs()) };
 }

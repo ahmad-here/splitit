@@ -15,6 +15,7 @@ export * from './extraction.schema';
 export * from './assignment.schema';
 export * from './per-person.schema';
 export * from './split-result.schema';
+export * from './split-draft.schema';
 
 export * from './chat-message.schema';
 export * from './chat-member.schema';

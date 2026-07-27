@@ -1,11 +1,38 @@
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 
 import { AppModule } from './app.module';
 import { ErrorShapeFilter } from './common/http-exception.filter';
 
+/**
+ * LangSmith auto-tracing: LangChain reads these env vars at call time. We mirror
+ * the modern LANGSMITH_* names to the older LANGCHAIN_* aliases so tracing works
+ * regardless of LangChain version. Set them in .env.local (see .env.example).
+ */
+function configureLangSmith(): void {
+  const alias: Record<string, string> = {
+    LANGSMITH_TRACING: 'LANGCHAIN_TRACING_V2',
+    LANGSMITH_API_KEY: 'LANGCHAIN_API_KEY',
+    LANGSMITH_PROJECT: 'LANGCHAIN_PROJECT',
+    LANGSMITH_ENDPOINT: 'LANGCHAIN_ENDPOINT',
+  };
+  for (const [modern, legacy] of Object.entries(alias)) {
+    if (process.env[modern] && !process.env[legacy]) process.env[legacy] = process.env[modern];
+  }
+  const on =
+    process.env.LANGCHAIN_TRACING_V2 === 'true' && !!process.env.LANGCHAIN_API_KEY;
+  Logger.log(
+    on ? `LangSmith tracing ON (project: ${process.env.LANGCHAIN_PROJECT ?? 'default'})` : 'LangSmith tracing off',
+    'Bootstrap',
+  );
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // ConfigModule has now loaded .env.local into process.env.
+  configureLangSmith();
 
   // The Expo app runs on a different origin (web/dev). Must allow the
   // Authorization header or browsers block every authenticated request with

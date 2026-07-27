@@ -32,6 +32,7 @@ export type SaveSplitMeta = {
 
 type SplitsValue = {
   splits: SplitRecord[];
+  hydrated: boolean;
   saveSplit: (result: SplitResult, meta: SaveSplitMeta) => Promise<SplitRecord>;
   removeSplit: (id: string) => Promise<void>;
   getSplit: (id: string) => SplitRecord | undefined;
@@ -46,16 +47,20 @@ export function SplitsProvider({ children }: { children: React.ReactNode }) {
   const active = !!user && emailVerified;
   const uid = user?.uid ?? null;
   const [splits, setSplits] = useState<SplitRecord[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!active) {
       setSplits([]);
+      setHydrated(true);
       return;
     }
     try {
       setSplits(await listSplitsRemote());
     } catch {
       // keep last-known on transient failure
+    } finally {
+      setHydrated(true);
     }
   }, [active]);
 
@@ -119,8 +124,8 @@ export function SplitsProvider({ children }: { children: React.ReactNode }) {
   const getSplit = useCallback((id: string) => splits.find((s) => s.id === id), [splits]);
 
   const value = useMemo<SplitsValue>(
-    () => ({ splits, saveSplit, removeSplit, getSplit, refresh, reset }),
-    [splits, saveSplit, removeSplit, getSplit, refresh, reset],
+    () => ({ splits, hydrated, saveSplit, removeSplit, getSplit, refresh, reset }),
+    [splits, hydrated, saveSplit, removeSplit, getSplit, refresh, reset],
   );
 
   return <SplitsContext.Provider value={value}>{children}</SplitsContext.Provider>;

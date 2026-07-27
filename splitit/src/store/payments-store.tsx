@@ -11,6 +11,7 @@ import { useAuth } from '@/store/auth-store';
 
 type PaymentsValue = {
   payments: Payment[];
+  hydrated: boolean;
   addPayment: (friendId: string, amount: number, direction: PaymentDirection, note?: string) => Promise<Payment>;
   refresh: () => Promise<void>;
   reset: () => void;
@@ -22,16 +23,20 @@ export function PaymentsProvider({ children }: { children: React.ReactNode }) {
   const { user, emailVerified } = useAuth();
   const active = !!user && emailVerified;
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!active) {
       setPayments([]);
+      setHydrated(true);
       return;
     }
     try {
       setPayments(await listPaymentsRemote());
     } catch {
       // keep last-known on transient failure
+    } finally {
+      setHydrated(true);
     }
   }, [active]);
 
@@ -51,8 +56,8 @@ export function PaymentsProvider({ children }: { children: React.ReactNode }) {
   const reset = useCallback(() => setPayments([]), []);
 
   const value = useMemo<PaymentsValue>(
-    () => ({ payments, addPayment, refresh, reset }),
-    [payments, addPayment, refresh, reset],
+    () => ({ payments, hydrated, addPayment, refresh, reset }),
+    [payments, hydrated, addPayment, refresh, reset],
   );
 
   return <PaymentsContext.Provider value={value}>{children}</PaymentsContext.Provider>;

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 
-import { runSplit } from '../core/graph/graph';
+import { runSplit } from '../core/agents/split-agent';
 import type { SplitResult } from '../core/schema';
 import type { UploadedFileLike } from '../common/uploaded-file';
 

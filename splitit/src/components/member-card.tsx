@@ -63,7 +63,7 @@ export function MemberCard({ friend, balance, canRemind, onSettle, onRemind, onD
               accessibilityLabel={`Remind ${friend.name}`}
               style={[styles.circle, { backgroundColor: theme.primary }]}
             >
-              <Ionicons name="notifications" size={18} color={theme.onPrimary} />
+              <Ionicons name="notifications-outline" size={18} color={theme.onPrimary} />
             </Pressable>
           ) : null}
         </View>

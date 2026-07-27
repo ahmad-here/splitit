@@ -1,55 +1,17 @@
-import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
+import { runChatReply } from '../agents/chat-agent';
 import { getProvider } from '../llm';
 import { llmCallOptions } from '../llm/call-options';
 import { computePerPerson, round2, sumPerPerson } from '../split/split-math';
-import { MEMORY_EXTRACTION_PROMPT, SYSTEM_PROMPT } from '../constants';
+import { MEMORY_EXTRACTION_PROMPT } from '../constants';
 import {
-  ChatReplySchema,
   MemoryFactsSchema,
   type ChatMember,
   type ChatMessage,
-  type ChatReply,
   type MemoryFacts,
   type SplitResult,
 } from '../schema';
-
-function buildMessages(history: ChatMessage[], members: ChatMember[], memoryFacts: string[] = []) {
-  const membersLine =
-    members.length > 0
-      ? `KNOWN MEMBERS (json): ${JSON.stringify(members)}`
-      : 'KNOWN MEMBERS (json): [] (the user has not added any members yet)';
-
-  const memoryLine =
-    memoryFacts.length > 0
-      ? `\n\nWHAT YOU REMEMBER ABOUT THE USER (from past chats): ${JSON.stringify(memoryFacts)}`
-      : '';
-
-  const messages: (SystemMessage | HumanMessage | AIMessage)[] = [
-    new SystemMessage(`${SYSTEM_PROMPT}\n\n${membersLine}${memoryLine}`),
-  ];
-
-  for (const m of history) {
-    if (m.role === 'assistant') {
-      messages.push(new AIMessage(m.text));
-      continue;
-    }
-    // user turn — may carry an image
-    if (m.image) {
-      messages.push(
-        new HumanMessage({
-          content: [
-            { type: 'text', text: m.text || '(no message — receipt photo attached)' },
-            { type: 'image_url', image_url: m.image },
-          ],
-        }),
-      );
-    } else {
-      messages.push(new HumanMessage(m.text));
-    }
-  }
-  return messages;
-}
 
 export type ChatResponse = { reply: string; result: SplitResult | null; title: string | null };
 
@@ -58,19 +20,44 @@ export async function runChat(
   members: ChatMember[],
   memoryFacts: string[] = [],
 ): Promise<ChatResponse> {
-  const model = getProvider().getModel();
-  const structured = model.withStructuredOutput(ChatReplySchema, { name: 'chat_reply' });
-
-  const output = (await structured.invoke(buildMessages(history, members, memoryFacts), llmCallOptions())) as ChatReply;
+  // The conversational agent (createAgent + compute_split tool) returns a typed reply.
+  const output = await runChatReply(history, members, memoryFacts);
 
   if (!output.ready || !output.split) {
     return { reply: output.reply, result: null, title: null };
   }
 
   const split = output.split;
+
+  // Deterministic guard: participants may only be the selected members + "Me".
+  // If the model included anyone else, refuse the split and ask to add them —
+  // never trust the model to enforce this.
+  const allowed = new Set(members.map((m) => m.name.trim().toLowerCase()));
+  allowed.add('me');
+  const isAllowed = (name: string) => allowed.has(name.trim().toLowerCase());
+  const unknown = [...new Set(split.participants.filter((p) => !isAllowed(p)))];
+  if (unknown.length > 0) {
+    const names = unknown.join(', ');
+    const plural = unknown.length > 1;
+    return {
+      reply: `${names} ${plural ? "aren't" : "isn't"} added to this split yet — add ${
+        plural ? 'them' : names
+      } from "Add members" above and I'll split it.`,
+      result: null,
+      title: null,
+    };
+  }
+
+  // Drop any assignment references to non-participants; if that empties an
+  // item, fall back to everyone so the math stays consistent.
+  const assignments = split.assignments.map((a) => {
+    const people = a.people.filter(isAllowed);
+    return { ...a, people: people.length > 0 ? people : split.participants };
+  });
+
   const perPerson = computePerPerson({
     items: split.items,
-    assignments: split.assignments,
+    assignments,
     participants: split.participants,
     tax: split.tax,
     tip: split.tip,
@@ -80,7 +67,7 @@ export async function runChat(
 
   const result: SplitResult = {
     items: split.items,
-    assignments: split.assignments,
+    assignments,
     perPerson,
     subtotal: split.subtotal,
     tax: split.tax,
