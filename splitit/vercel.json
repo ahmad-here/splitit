@@ -1,0 +1,8 @@
+{
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/split/:id", "destination": "/split/[id].html" },
+    { "source": "/(.*)", "destination": "/+not-found.html" }
+  ]
+}
