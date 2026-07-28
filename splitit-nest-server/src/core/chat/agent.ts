@@ -19,9 +19,10 @@ export async function runChat(
   history: ChatMessage[],
   members: ChatMember[],
   memoryFacts: string[] = [],
+  threadId?: string,
 ): Promise<ChatResponse> {
   // The conversational agent (createAgent + compute_split tool) returns a typed reply.
-  const output = await runChatReply(history, members, memoryFacts);
+  const output = await runChatReply(history, members, memoryFacts, threadId);
 
   if (!output.ready || !output.split) {
     return { reply: output.reply, result: null, title: null };

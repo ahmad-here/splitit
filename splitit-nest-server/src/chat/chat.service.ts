@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 
 import { extractMemory, runChat, type ChatResponse } from '../core/chat/agent';
@@ -26,37 +27,62 @@ export class ChatService {
     if (messages.length === 0) throw new BadRequestException('No messages provided.');
 
     // Anonymous (backward-compatible) path: stateless, no memory, no storage.
+    // Still tag a thread id so the trace groups into a LangSmith thread.
     if (!ctx.uid) {
-      const res = await runChat(messages, members);
+      const res = await runChat(messages, members, [], randomUUID());
       return { ...res, chatId: null };
     }
 
     const uid = ctx.uid;
     const facts = await this.memory.getFacts(uid);
-    const res = await runChat(messages, members, facts);
 
-    // Persist into a chat session (create one on first turn).
+    // Resolve the chat session up-front so it can double as the LangSmith
+    // thread id (groups every turn of this conversation into one thread).
     let chatId = ctx.chatId ?? null;
-    try {
-      if (!chatId) chatId = await this.store.createChat(uid);
-      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-      // Offload the receipt photo to Storage so the data URL never lands in
-      // Firestore (~1 MB doc limit). Best-effort: drop the image on failure.
-      let imageUrl: string | undefined;
-      if (lastUser?.image) {
-        imageUrl = await this.storage.uploadDataUrl(uid, lastUser.image).catch(() => undefined);
+    if (!chatId) {
+      try {
+        chatId = await this.store.createChat(uid);
+      } catch (err) {
+        this.logger.warn(`Chat create failed: ${err instanceof Error ? err.message : err}`);
       }
-      const toStore = [
-        ...(lastUser ? [{ role: 'user' as const, text: lastUser.text, imageUrl }] : []),
-        { role: 'assistant' as const, text: res.reply },
-      ];
-      const title = res.title ?? undefined;
-      await this.store.append(uid, chatId, toStore, title);
-    } catch (err) {
-      this.logger.warn(`Chat persistence failed: ${err instanceof Error ? err.message : err}`);
     }
 
-    // Update durable cross-chat memory (best-effort — never break the reply).
+    const res = await runChat(messages, members, facts, chatId ?? randomUUID());
+
+    // Persist the turn into the chat session.
+    if (chatId) {
+      try {
+        const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+        // Offload the receipt photo to Storage so the data URL never lands in
+        // Firestore (~1 MB doc limit). Best-effort: drop the image on failure.
+        let imageUrl: string | undefined;
+        if (lastUser?.image) {
+          imageUrl = await this.storage.uploadDataUrl(uid, lastUser.image).catch(() => undefined);
+        }
+        const toStore = [
+          ...(lastUser ? [{ role: 'user' as const, text: lastUser.text, imageUrl }] : []),
+          { role: 'assistant' as const, text: res.reply },
+        ];
+        await this.store.append(uid, chatId, toStore, res.title ?? undefined);
+      } catch (err) {
+        this.logger.warn(`Chat persistence failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+
+    // Update durable cross-chat memory in the BACKGROUND so the user gets the
+    // reply immediately (the extraction LLM call can take several seconds).
+    // Fire-and-forget: best-effort, never blocks or breaks the response.
+    void this.updateMemoryInBackground(uid, messages, facts);
+
+    return { ...res, chatId };
+  }
+
+  /** Distil + persist durable memory after the reply has been sent. */
+  private async updateMemoryInBackground(
+    uid: string,
+    messages: ChatMessage[],
+    facts: string[],
+  ): Promise<void> {
     try {
       const updated = await extractMemory(messages, facts);
       if (updated.length && JSON.stringify(updated) !== JSON.stringify(facts)) {
@@ -65,7 +91,5 @@ export class ChatService {
     } catch (err) {
       this.logger.warn(`Memory update failed: ${err instanceof Error ? err.message : err}`);
     }
-
-    return { ...res, chatId };
   }
 }

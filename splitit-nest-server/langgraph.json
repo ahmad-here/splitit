@@ -1,0 +1,9 @@
+{
+  "node_version": "20",
+  "dependencies": ["."],
+  "graphs": {
+    "chat": "./src/core/agents/studio-graphs.ts:chatGraph",
+    "split": "./src/core/agents/studio-graphs.ts:splitGraph"
+  },
+  "env": ".env.local"
+}

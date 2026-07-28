@@ -58,3 +58,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Firebase service-account credentials (never commit)
 service-account.json
 *-firebase-adminsdk-*.json
+
+# LangGraph API
+.langgraph_api

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable } from '@nestjs/common';
 
 import { runSplit } from '../core/agents/split-agent';
@@ -28,10 +29,14 @@ export class SplitService {
     const mime = image.mimetype || 'image/jpeg';
     const imageDataUrl = `data:${mime};base64,${image.buffer.toString('base64')}`;
 
-    return runSplit({
-      imageDataUrl,
-      description: String(description ?? ''),
-      participants: people,
-    });
+    // One-shot flow → one LangSmith thread per split request.
+    return runSplit(
+      {
+        imageDataUrl,
+        description: String(description ?? ''),
+        participants: people,
+      },
+      randomUUID(),
+    );
   }
 }

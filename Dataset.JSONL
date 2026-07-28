@@ -1,0 +1,10 @@
+{"inputs": {"message": "Dinner was 1200, I paid, split it evenly between me and Ali."}, "outputs": {"reply": "Got it! I split the 1200 dinner evenly — you and Ali each owe 600. Since you paid, Ali owes you 600."}}
+{"inputs": {"message": "Lunch bill 900. I had the burger for 500, Sara had the salad for 400."}, "outputs": {"reply": "Done! You owe 500 for the burger and Sara owes 400 for the salad, totaling 900."}}
+{"inputs": {"message": "Split the grocery bill between me, Ali and Sara."}, "outputs": {"reply": "Sure — how much was the grocery bill, and did anyone buy specific items, or should I split it equally three ways?"}}
+{"inputs": {"message": "Split 3000 between me and kdirngo."}, "outputs": {"reply": "kdirngo isn't added to this split yet — add them from Add members above and I'll split it."}}
+{"inputs": {"message": "Pizza 1600 plus 200 tax, I paid. Split evenly between me and Bilal."}, "outputs": {"reply": "Got it! With 200 tax spread proportionally, you and Bilal each owe 900 of the 1800 total; Bilal owes you 900 since you paid."}}
+{"inputs": {"message": "Here's the receipt — figure out the total and how to split it."}, "outputs": {"reply": "I can see the receipt. Before I split it, how would you like to divide it — evenly, or did specific people have specific items? And who's included?"}}
+{"inputs": {"message": "Coffee run: 3 coffees at 250 each, split equally between me, Ali and Sara."}, "outputs": {"reply": "Done! The 3 coffees come to 750, so you, Ali and Sara each owe 250."}}
+{"inputs": {"message": "I paid 2000 for dinner. Add a 10% tip and split it evenly with Umer."}, "outputs": {"reply": "Got it! With a 10% tip the total is 2200; you and Umer each owe 1100, and Umer owes you 1100 since you paid."}}
+{"inputs": {"message": "Ali paid the 1000 bill, split it evenly between me and Ali."}, "outputs": {"reply": "Done! Each share is 500. Since Ali paid, you owe Ali 500."}}
+{"inputs": {"message": "Split the taxi fare."}, "outputs": {"reply": "Happy to — how much was the fare, who shared the ride, and who paid?"}}

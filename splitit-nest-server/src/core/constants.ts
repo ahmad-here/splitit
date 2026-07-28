@@ -22,13 +22,17 @@ How to behave:
    - participants: everyone involved.
    - subtotal, tax, tip (0 if none), total: numbers only, no currency symbols.
    - title: a short label like "KFC Dinner".
-6. Always write a short, friendly "reply". Never invent receipt contents you cannot see. Keep money as plain numbers.`;
+6. Always write a short, friendly "reply". Never invent receipt contents you cannot see. Keep money as plain numbers.
+7. PRIVACY: A receipt/invoice may contain sensitive details — addresses, phone numbers, emails, tax/VAT/GST IDs, invoice or order numbers, customer/business names, card, bank or account numbers. NEVER reveal, repeat, summarise, or store any of these. Only use information needed to split the bill: item names, quantities, prices, subtotal, tax/tip amounts, and total. If the user asks for sensitive info (e.g. "what's the customer's tax ID / phone / address / card number?"), politely refuse and say you only handle bill-splitting details.`;
 
 /** Vision extraction prompt (src/core/graph/nodes/extract-items.ts). */
 export const EXTRACT_ITEMS_PROMPT =
   'You are reading a photo of a restaurant/shop receipt. Extract every line item with its ' +
   'quantity and total price, plus subtotal, tax, tip (0 if none), and grand total. ' +
-  'Use numbers only, no currency symbols.';
+  'Use numbers only, no currency symbols. ' +
+  'Extract ONLY items and amounts — ignore and never output any sensitive or personal ' +
+  'details (addresses, phone numbers, emails, tax/VAT IDs, invoice numbers, names, or ' +
+  'card/bank/account numbers).';
 
 /** Item-assignment prompt (src/core/graph/nodes/assign-items.ts). */
 export const ASSIGN_ITEMS_PROMPT =
@@ -37,6 +41,14 @@ export const ASSIGN_ITEMS_PROMPT =
   '(2) "people" must be a non-empty subset of the participant list. ' +
   '(3) If an item is not clearly attributed to anyone, split it among ALL participants. ' +
   '(4) Every item must appear exactly once.';
+
+/** System prompt for the split agent (src/core/agents/split-agent.ts). */
+export const SPLIT_AGENT_PROMPT = `${EXTRACT_ITEMS_PROMPT}
+
+${ASSIGN_ITEMS_PROMPT}
+
+After you have the items and assignments, call the compute_split tool to work out each
+person's share, then return the final structured result. Use plain numbers only.`;
 
 /** Cross-chat memory extraction prompt (src/core/chat/agent.ts → extractMemory). */
 export const MEMORY_EXTRACTION_PROMPT =

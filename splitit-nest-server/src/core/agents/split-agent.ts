@@ -1,7 +1,7 @@
 import { HumanMessage } from '@langchain/core/messages';
 import { createAgent, toolStrategy } from 'langchain';
 
-import { ASSIGN_ITEMS_PROMPT, EXTRACT_ITEMS_PROMPT } from '../constants';
+import { SPLIT_AGENT_PROMPT } from '../constants';
 import { getProvider } from '../llm';
 import { agentInvokeConfig } from '../llm/call-options';
 import { computePerPerson, round2, sumPerPerson } from '../split/split-math';
@@ -10,20 +10,13 @@ import { SplitDraftSchema, type SplitDraft, type SplitResult } from '../schema';
 
 export type SplitInput = { imageDataUrl: string; description: string; participants: string[] };
 
-const SPLIT_AGENT_PROMPT = `${EXTRACT_ITEMS_PROMPT}
-
-${ASSIGN_ITEMS_PROMPT}
-
-After you have the items and assignments, call the compute_split tool to work out each
-person's share, then return the final structured result. Use plain numbers only.`;
-
 /**
  * Split agent: reads the receipt image + description, assigns items, and (via the
  * compute_split tool) works out the shares. The agent is the read/assign brain;
  * the per-person math is re-derived in code here so amounts are always correct
  * regardless of what the model returns.
  */
-export async function runSplit(input: SplitInput): Promise<SplitResult> {
+export async function runSplit(input: SplitInput, threadId?: string): Promise<SplitResult> {
   const agent = createAgent({
     model: getProvider().getModel(),
     tools: [computeSplitTool],
@@ -43,7 +36,7 @@ export async function runSplit(input: SplitInput): Promise<SplitResult> {
     ],
   });
 
-  const res = (await agent.invoke({ messages: [message] }, agentInvokeConfig())) as unknown as {
+  const res = (await agent.invoke({ messages: [message] }, agentInvokeConfig(threadId))) as unknown as {
     structuredResponse: SplitDraft;
   };
   const draft = res.structuredResponse;

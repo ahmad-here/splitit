@@ -7,20 +7,44 @@ import { agentInvokeConfig } from '../llm/call-options';
 import { computeSplitTool } from '../tools';
 import { ChatReplySchema, type ChatMember, type ChatMessage, type ChatReply } from '../schema';
 
+/**
+ * Gemini only accepts images as base64 data URLs. Restored chats carry the
+ * receipt as an https (Cloudinary) URL, so fetch + convert those; pass data URLs
+ * through untouched. Returns null on failure so we can drop the image gracefully.
+ */
+async function toDataUrl(image: string): Promise<string | null> {
+  if (image.startsWith('data:')) return image;
+  if (!/^https?:\/\//.test(image)) return null;
+  try {
+    const res = await fetch(image);
+    if (!res.ok) return null;
+    const mime = res.headers.get('content-type') || 'image/jpeg';
+    const b64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+    return `data:${mime};base64,${b64}`;
+  } catch {
+    return null;
+  }
+}
+
 /** Turn the chat history into agent messages (image turns carry an image_url). */
-function toMessages(history: ChatMessage[]): BaseMessage[] {
-  return history.map((m) => {
-    if (m.role === 'assistant') return new AIMessage(m.text);
-    if (m.image) {
-      return new HumanMessage({
-        content: [
-          { type: 'text', text: m.text || '(no message — receipt photo attached)' },
-          { type: 'image_url', image_url: m.image },
-        ],
-      });
-    }
-    return new HumanMessage(m.text);
-  });
+async function toMessages(history: ChatMessage[]): Promise<BaseMessage[]> {
+  return Promise.all(
+    history.map(async (m) => {
+      if (m.role === 'assistant') return new AIMessage(m.text);
+      if (m.image) {
+        const dataUrl = await toDataUrl(m.image);
+        if (dataUrl) {
+          return new HumanMessage({
+            content: [
+              { type: 'text', text: m.text || '(no message — receipt photo attached)' },
+              { type: 'image_url', image_url: dataUrl },
+            ],
+          });
+        }
+      }
+      return new HumanMessage(m.text);
+    }),
+  );
 }
 
 /**
@@ -33,6 +57,7 @@ export async function runChatReply(
   history: ChatMessage[],
   members: ChatMember[],
   memoryFacts: string[] = [],
+  threadId?: string,
 ): Promise<ChatReply> {
   const membersLine =
     members.length > 0
@@ -52,7 +77,10 @@ export async function runChatReply(
     responseFormat: toolStrategy(ChatReplySchema) as never,
   });
 
-  const res = (await agent.invoke({ messages: toMessages(history) }, agentInvokeConfig())) as unknown as {
+  const res = (await agent.invoke(
+    { messages: await toMessages(history) },
+    agentInvokeConfig(threadId),
+  )) as unknown as {
     structuredResponse: ChatReply;
   };
   return res.structuredResponse;
